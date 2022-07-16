@@ -101,14 +101,27 @@ func main() {
 	cmdBuild.Flags().AddFlagSet(flagQuiet)
 	cmdBuild.Flags().AddFlagSet(compilerFlags)
 	cmdBuild.Flags().AddFlagSet(flagWatch)
+	options.NoCache = true
+
 	cmdBuild.RunE = func(cmd *cobra.Command, args []string) error {
+		var io gbuild.IoWriter
+		if options.Watch {
+			io = gbuild.NewDevServer(8888)
+		} else {
+			io = gbuild.NewFileWriter(pkgObj)
+		}
+
 		options.BuildTags = strings.Fields(tags)
+		html := gbuild.InitHtml(args[0], pkgObj, io)
+		args[0] += "/src"
+		scssCompiler := gbuild.NewScssCompiler(args[0], pkgObj)
 		for {
-			s, err := gbuild.NewSession(options)
+			s, err := gbuild.NewSession(options, scssCompiler, html, io)
 			if err != nil {
 				options.PrintError("%s\n", err)
 				return err
 			}
+			scssCompiler.Session = s
 
 			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
@@ -157,6 +170,7 @@ func main() {
 					if err != nil {
 						return err
 					}
+					scssCompiler.BuildScss()
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.
 						if pkgObj == "" {
 							pkgObj = filepath.Base(pkg.Dir) + ".js"
@@ -171,13 +185,20 @@ func main() {
 				return nil
 			}()
 
-			if s.Watcher == nil {
-				return err
-			} else if err != nil {
-				handleError(err, options, nil)
+			html.Generate()
+			if devServer, ok := io.(*gbuild.DevServer); ok {
+				devServer.Send()
 			}
+			if s.Watcher == nil {
+				break
+			}
+			// else if err != nil {
+			// handleError(err, options, nil)
+			// }
 			s.WaitForChange()
+			options.NoCache = false
 		}
+		return nil
 	}
 
 	cmdInstall := &cobra.Command{
@@ -191,7 +212,7 @@ func main() {
 	cmdInstall.RunE = func(cmd *cobra.Command, args []string) error {
 		options.BuildTags = strings.Fields(tags)
 		for {
-			s, err := gbuild.NewSession(options)
+			s, err := gbuild.NewSession(options, nil, nil, nil)
 			if err != nil {
 				return err
 			}
@@ -237,9 +258,10 @@ func main() {
 
 			if s.Watcher == nil {
 				return err
-			} else if err != nil {
-				handleError(err, options, nil)
 			}
+			// else if err != nil {
+			// 	handleError(err, options, nil)
+			// }
 			s.WaitForChange()
 		}
 	}
@@ -297,7 +319,7 @@ func main() {
 			os.Remove(tempfile.Name())
 			os.Remove(tempfile.Name() + ".map")
 		}()
-		s, err := gbuild.NewSession(options)
+		s, err := gbuild.NewSession(options, nil, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -372,7 +394,7 @@ func main() {
 			}
 			localOpts := options
 			localOpts.TestedPackage = pkg.ImportPath
-			s, err := gbuild.NewSession(localOpts)
+			s, err := gbuild.NewSession(localOpts, nil, nil, nil)
 			if err != nil {
 				return err
 			}
@@ -542,7 +564,7 @@ func main() {
 
 		// Create a new session eagerly to check if it fails, and report the error right away.
 		// Otherwise users will see it only after trying to serve a package, which is a bad experience.
-		_, err := gbuild.NewSession(options)
+		_, err := gbuild.NewSession(options, nil, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -679,7 +701,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 
 	// Create a new session to pick up changes to source code on disk.
 	// TODO(dmitshur): might be possible to get a single session to detect changes to source code on disk
-	s, err := gbuild.NewSession(fs.options)
+	s, err := gbuild.NewSession(fs.options, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -711,7 +733,7 @@ func (fs serveCommandFileSystem) Open(requestName string) (http.File, error) {
 				if err != nil {
 					return err
 				}
-				if err := compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease()); err != nil {
+				if err := compiler.WriteProgramCode(deps, sourceMapFilter, s.GoRelease(), fs.options.Watch, nil); err != nil {
 					return err
 				}
 
@@ -891,11 +913,9 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 		// -	OS process limit
 		// -	Node.js (V8) limit
 		//
-		// GopherJS fetches the current OS process limit, and sets the Node.js limit
-		// to a value slightly below it (otherwise nodejs is likely to segfault).
-		// The backoff size has been determined experimentally on a linux machine,
-		// so it may not be 100% reliable. So both limits are kept in sync and can
-		// be controlled by setting OS process limit. E.g.:
+		// GopherJS fetches the current OS process limit, and sets the
+		// Node.js limit to the same value. So both limits are kept in sync
+		// and can be controlled by setting OS process limit. E.g.:
 		//
 		// 	ulimit -s 10000 && gopherjs test
 		//
@@ -903,12 +923,7 @@ func runNode(script string, args []string, dir string, quiet bool, out io.Writer
 		if err != nil {
 			return fmt.Errorf("failed to get stack size limit: %v", err)
 		}
-		cur = cur / 1024           // Convert bytes to KiB.
-		defaultSize := uint64(984) // --stack-size default value.
-		if backoff := uint64(64); cur > defaultSize+backoff {
-			cur = cur - backoff
-		}
-		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", cur))
+		allArgs = append(allArgs, fmt.Sprintf("--stack_size=%v", cur/1000)) // Convert from bytes to KB.
 	}
 
 	allArgs = append(allArgs, script)
@@ -1083,6 +1098,9 @@ var benchmarks = []testing.InternalBenchmark{
 {{end}}
 }
 
+// TODO(nevkontakte): Extract fuzz targets from the source.
+var fuzzTargets = []testing.InternalFuzzTarget{}
+
 var examples = []testing.InternalExample{
 {{range .Examples}}
 	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}, {{.Unordered}}},
@@ -1090,7 +1108,7 @@ var examples = []testing.InternalExample{
 }
 
 func main() {
-	m := testing.MainStart(testdeps.TestDeps{}, tests, benchmarks, examples)
+	m := testing.MainStart(testdeps.TestDeps{}, tests, benchmarks, fuzzTargets, examples)
 {{with .TestMain}}
 	{{.Package}}.{{.Name}}(m)
 {{else}}

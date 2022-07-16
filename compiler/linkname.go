@@ -105,18 +105,18 @@ func parseGoLinknames(fset *token.FileSet, pkgPath string, file *ast.File) ([]Go
 		}
 
 		if obj.Kind != ast.Fun {
-			if pkgPath == "math/bits" || pkgPath == "reflect" {
+			// if pkgPath == "math/bits" || pkgPath == "reflect" {
 				// These standard library packages are known to use go:linkname with
 				// variables, which GopherJS doesn't support. We silently ignore such
 				// directives, since it doesn't seem to cause any problems.
 				return nil
-			}
-			return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
+			// }
+			// return fmt.Errorf("gopherjs: //go:linkname is only supported for functions, got %q", obj.Kind)
 		}
 
 		decl := obj.Decl.(*ast.FuncDecl)
 		if decl.Body != nil {
-			if pkgPath == "runtime" || pkgPath == "internal/bytealg" {
+			if pkgPath == "runtime" || pkgPath == "internal/bytealg" || pkgPath == "internal/fuzz" {
 				// These standard library packages are known to use unsupported
 				// "insert"-style go:linkname directives, which we ignore here and handle
 				// case-by-case in native overrides.

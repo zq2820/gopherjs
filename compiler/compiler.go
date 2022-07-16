@@ -83,6 +83,9 @@ type Archive struct {
 	GoLinknames []GoLinkname
 	// Time when this archive was built.
 	BuildTime time.Time
+	// Hot reload
+	Updated    bool
+	GenerateJs []byte
 }
 
 func (a Archive) String() string {
@@ -189,7 +192,7 @@ type dceInfo struct {
 	methodFilter string
 }
 
-func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) error {
+func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string, isWatch bool, scssCache map[string][]byte) error {
 	mainPkg := pkgs[len(pkgs)-1]
 	minify := mainPkg.Minified
 
@@ -261,6 +264,57 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string) err
 	if _, err := w.Write([]byte(fmt.Sprintf("var $goVersion = %q;\n", goVersion))); err != nil {
 		return err
 	}
+	if isWatch {
+		w.Write([]byte("\nwindow[\"dependencies\"]={};\nwindow[\"modules\"]={};\nvar styleModules = {};\nvar __golang_require_css__ = function(path, content) {\n  var style = styleModules[path];\n  if(!style) {\n    style=document.createElement('style');\n    style.type='text/css';\n    document.head.appendChild(style)\n  }\n  style.innerHTML = content;\n  styleModules[path] = style\n};\n"))
+		w.Write([]byte("var css = {\n"))
+		for path, content := range scssCache {
+			w.Write([]byte("  "))
+			w.Write([]byte(fmt.Sprintf("\"%s\" : \"%s\",", path, content)))
+		}
+		w.Write([]byte("\n};\n"))
+		w.Write([]byte("var keys = Object.getOwnPropertyNames(css);\nfor(var i = 0; i < keys.length; i ++){\n  __golang_require_css__(keys[i], css[keys[i]]);\n};\n"))
+		w.Write([]byte(`
+  var socket = new WebSocket("ws://localhost:8888/update/ws");
+  socket.onmessage = (e) => {
+    e.data.text().then((res) => {
+      var hot = JSON.parse(res)
+      if (hot.js) {
+        var chunks = hot.js
+				var arr = []
+        for (var i = 0; i < chunks.length; i ++) {
+          $mainPkg = eval(chunks[i][1])
+        }
+				$mainPkg.$init()
+        for (var i = 0; i < chunks.length; i ++) {
+          if (window.dependencies[chunks[i][0]]) {
+            for(var j = 0; j < window.dependencies[chunks[i][0]].length; j ++) {
+              window.dependencies[chunks[i][0]][j].forceUpdate()
+            }
+          }
+        }
+      }
+      if (hot.css) {
+        var chunks = hot.css
+        for (let i = 0; i < chunks.length; i ++) {
+          if (!chunks[i][1]) {
+            styleModules[chunks[i][0]].remove()
+            styleModules[chunks[i][0]] = undefined
+          } else {
+            if (styleModules[chunks[i][0]]) {
+              styleModules[chunks[i][0]].innerHTML = chunks[i][1]
+            } else {
+              __golang_require_css__(chunks[i][0], chunks[i][1])
+            }
+          }
+        }
+      }
+    })
+  }
+  socket.onerror = (e) => {
+    console.log(e)
+  }
+`))
+	}
 
 	preludeJS := prelude.Prelude
 	if minify {
@@ -293,10 +347,13 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			panic(err)
 		}
 	}
-	if _, err := w.Write(pkg.IncJSCode); err != nil {
+
+	buffer := bytes.NewBuffer([]byte{})
+
+	if _, err := writeByte(buffer, w, pkg.IncJSCode); err != nil {
 		return err
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
+	if _, err := writeByte(buffer, w, removeWhitespace([]byte(fmt.Sprintf("$packages[\"%s\"] = (function() {\n", pkg.ImportPath)), minify)); err != nil {
 		return err
 	}
 	vars := []string{"$pkg = {}", "$init"}
@@ -307,11 +364,11 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			filteredDecls = append(filteredDecls, d)
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
+	if _, err := writeByte(buffer, w, removeWhitespace([]byte(fmt.Sprintf("\tvar %s;\n", strings.Join(vars, ", "))), minify)); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.DeclCode); err != nil {
+		if _, err := writeByte(buffer, w, d.DeclCode); err != nil {
 			return err
 		}
 		if gls.IsImplementation(d.LinkingName) {
@@ -319,18 +376,18 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 			// callers via $linkname object (declared in prelude). We are not using
 			// $pkg to avoid clashes with exported symbols.
 			code := fmt.Sprintf("\t$linknames[%q] = %s;\n", d.LinkingName.String(), d.Vars[0])
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+			if _, err := writeByte(buffer, w, removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
 		}
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.MethodListCode); err != nil {
+		if _, err := writeByte(buffer, w, d.MethodListCode); err != nil {
 			return err
 		}
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.TypeInitCode); err != nil {
+		if _, err := writeByte(buffer, w, d.TypeInitCode); err != nil {
 			return err
 		}
 	}
@@ -352,26 +409,33 @@ func WritePkgCode(pkg *Archive, dceSelection map[*Decl]struct{}, gls goLinknameS
 		}
 		if len(lines) > 0 {
 			code := fmt.Sprintf("\t$pkg.$initLinknames = function() {\n%s};\n", strings.Join(lines, ""))
-			if _, err := w.Write(removeWhitespace([]byte(code), minify)); err != nil {
+			if _, err := writeByte(buffer, w, removeWhitespace([]byte(code), minify)); err != nil {
 				return err
 			}
 		}
 	}
 
-	if _, err := w.Write(removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
+	if _, err := writeByte(buffer, w, removeWhitespace([]byte("\t$init = function() {\n\t\t$pkg.$init = function() {};\n\t\t/* */ var $f, $c = false, $s = 0, $r; if (this !== undefined && this.$blk !== undefined) { $f = this; $c = true; $s = $f.$s; $r = $f.$r; } s: while (true) { switch ($s) { case 0:\n"), minify)); err != nil {
 		return err
 	}
 	for _, d := range filteredDecls {
-		if _, err := w.Write(d.InitCode); err != nil {
+		if _, err := writeByte(buffer, w, d.InitCode); err != nil {
 			return err
 		}
 	}
-	if _, err := w.Write(removeWhitespace([]byte("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\t$pkg.$init = $init;\n\treturn $pkg;\n})();"), minify)); err != nil {
+	if _, err := writeByte(buffer, w, removeWhitespace([]byte("\t\t/* */ } return; } if ($f === undefined) { $f = { $blk: $init }; } $f.$s = $s; $f.$r = $r; return $f;\n\t};\n\t$pkg.$init = $init;\n\treturn $pkg;\n})();"), minify)); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte("\n")); err != nil { // keep this \n even when minified
+	if _, err := writeByte(buffer, w, []byte("\n")); err != nil { // keep this \n even when minified
 		return err
 	}
+
+	w.Writer.Write(buffer.Bytes())
+
+	if pkg.Updated {
+		pkg.GenerateJs = buffer.Bytes()
+	}
+
 	return nil
 }
 
@@ -408,6 +472,39 @@ func (f *SourceMapFilter) Write(p []byte) (n int, err error) {
 		}
 
 		n2, err = f.Writer.Write(w)
+		n += n2
+		for {
+			i := bytes.IndexByte(w, '\n')
+			if i == -1 {
+				f.column += len(w)
+				break
+			}
+			f.line++
+			f.column = 0
+			w = w[i+1:]
+		}
+
+		if err != nil || i == -1 {
+			return
+		}
+		if f.MappingCallback != nil {
+			f.MappingCallback(f.line+1, f.column, f.fileSet.Position(token.Pos(binary.BigEndian.Uint32(p[i+1:i+5]))))
+		}
+		p = p[i+5:]
+		n += 5
+	}
+}
+
+func writeByte(buffer io.Writer, f *SourceMapFilter, p []byte) (n int, err error) {
+	var n2 int
+	for {
+		i := bytes.IndexByte(p, '\b')
+		w := p
+		if i != -1 {
+			w = p[:i]
+		}
+
+		n2, err = buffer.Write(w)
 		n += n2
 		for {
 			i := bytes.IndexByte(w, '\n')
