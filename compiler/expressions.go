@@ -480,6 +480,9 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			return fc.formatExpr(`(%1s = %2e[%3s], %1s !== undefined ? %1s.v : %4e)`, fc.newVariable("_entry"), e.X, key, fc.zeroValue(t.Elem()))
 		case *types.Basic:
 			return fc.formatExpr("%e.charCodeAt(%f)", e.X, e.Index)
+		case *types.Signature:
+			expr := fc.formatExpr("%e", e.X)
+			return expr
 		default:
 			panic(fmt.Sprintf("Unhandled IndexExpr: %T\n", t))
 		}

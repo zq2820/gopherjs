@@ -788,15 +788,18 @@ func NewMappingCallback(m *sourcemap.Map, goroot, gopath string, localMap bool) 
 
 		file := originalPos.Filename
 
-		switch hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath); {
-		case localMap:
-			// no-op:  keep file as-is
-		case hasGopathPrefix:
-			file = filepath.ToSlash(file[prefixLen+4:])
-		case strings.HasPrefix(file, goroot):
-			file = filepath.ToSlash(file[len(goroot)+4:])
-		default:
-			file = filepath.Base(file)
+		hasGopathPrefix, prefixLen := hasGopathPrefix(file, gopath)
+		if !localMap {
+			env, _ := os.Getwd()
+			if strings.HasPrefix(file, env) {
+				file = file[len(env)+1:]
+			} else if hasGopathPrefix {
+				file = filepath.ToSlash(file[prefixLen+4:])
+			} else if strings.HasPrefix(file, goroot) {
+				file = filepath.ToSlash(file[len(goroot)+4:])
+			} else {
+				file = filepath.Base(file)
+			}
 		}
 
 		m.AddMapping(&sourcemap.Mapping{GeneratedLine: generatedLine, GeneratedColumn: generatedColumn, OriginalFile: file, OriginalLine: originalPos.Line, OriginalColumn: originalPos.Column})

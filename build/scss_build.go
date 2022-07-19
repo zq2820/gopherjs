@@ -68,12 +68,14 @@ func (context *ScssCompiler) Add(path string, container string) {
 }
 
 func (context *ScssCompiler) BuildScss() {
-	for path := range context.tasks.value {
-		context.compileFile(path)
-		context.tasks.Remove(path)
-		if context.Session.WatchReady() {
-			if devServer := context.Session.io.(*DevServer); devServer != nil {
-				devServer.Stash(Css, path, context.cssChunks[path])
+	for len(context.tasks.value) > 0 {
+		for path := range context.tasks.value {
+			context.compileFile(path)
+			context.tasks.Remove(path)
+			if context.Session.WatchReady() {
+				if devServer := context.Session.io.(*DevServer); devServer != nil {
+					devServer.Stash(Css, path, context.cssChunks[path])
+				}
 			}
 		}
 	}

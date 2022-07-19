@@ -168,6 +168,7 @@ func main() {
 					}
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
+						fmt.Println(err)
 						return err
 					}
 					scssCompiler.BuildScss()

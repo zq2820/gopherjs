@@ -8,6 +8,7 @@ import (
 
 func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 	component := ""
+	functionComponent := ""
 	props := ""
 	for _, decl := range file.Decls {
 		if component != "" && props != "" {
@@ -16,20 +17,36 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 
 		switch c := decl.(type) {
 		case *ast.GenDecl:
-			isComponent := false
-			isProps := false
 			if t, ok := c.Specs[0].(*ast.TypeSpec); ok {
 				if fieldList, ok := t.Type.(*ast.StructType); ok {
 					for _, field := range fieldList.Fields.List {
-						if selectorExpr, ok := field.Type.(*ast.SelectorExpr); ok {
-							if ident, ok := selectorExpr.X.(*ast.Ident); ok {
+						searchComponent := func(expr *ast.SelectorExpr) bool {
+							if ident, ok := expr.X.(*ast.Ident); ok {
 								if ident.Name == "react" {
-									if selectorExpr.Sel.Name == "ComponentDef" {
-										isComponent = true
-										break
+									if expr.Sel.Name == "ComponentDef" {
+										component = t.Name.Name
+										return true
 									}
-									if selectorExpr.Sel.Name == "Props" {
-										isProps = true
+									if expr.Sel.Name == "FunctionComponent" {
+										functionComponent = t.Name.Name
+										return true
+									}
+									if expr.Sel.Name == "Props" {
+										props = t.Name.Name
+										return true
+									}
+								}
+							}
+							return false
+						}
+						if selectorExpr, ok := field.Type.(*ast.SelectorExpr); ok {
+							if searchComponent(selectorExpr) {
+								break
+							}
+						} else {
+							if indexExpr, ok := field.Type.(*ast.IndexExpr); ok {
+								if selectorExpr, ok := indexExpr.X.(*ast.SelectorExpr); ok {
+									if searchComponent(selectorExpr) {
 										break
 									}
 								}
@@ -37,18 +54,17 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 						}
 					}
 				}
-				if isComponent {
-					component = t.Name.Name
-				}
-				if isProps {
-					props = t.Name.Name
-				}
 			}
 		}
 	}
 
-	if component != "" {
-		buildComponentElem := "build" + component + "Elem"
+	if component != "" || functionComponent != "" {
+		buildComponentElem := ""
+		if component != "" {
+			buildComponentElem = "build" + component + "Elem"
+		} else {
+			buildComponentElem = "build" + functionComponent + "Elem"
+		}
 		for _, decl := range file.Decls {
 			switch c := decl.(type) {
 			case *ast.FuncDecl:
@@ -87,18 +103,18 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 					}
 				}
 			case *ast.GenDecl:
-				if isWatch && c.Tok == token.IMPORT {
+				if c.Tok == token.IMPORT {
 					hasJs := false
 					hasChunks := false
 					hasCopier := false
 					for _, spec := range c.Specs {
-						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/chunks\"" {
+						if !isWatch || spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/chunks\"" {
 							hasChunks = true
 						}
 						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/js\"" {
 							hasJs = true
 						}
-						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/jinzhu/copier\"" {
+						if (!isWatch && component != "") || spec.(*ast.ImportSpec).Path.Value == "\"github.com/jinzhu/copier\"" {
 							hasCopier = true
 						}
 						if hasJs && hasChunks && hasCopier {
@@ -123,71 +139,217 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 				}
 			}
 		}
-		initTemplate(file, component)
-
-		if isWatch {
-			getProps := &ast.FuncDecl{
+		if component != "" {
+			initTemplate(file, component)
+		} else {
+			file.Decls = append(file.Decls, &ast.FuncDecl{
 				Recv: &ast.FieldList{
 					List: []*ast.Field{{
 						Names: []*ast.Ident{{Name: "a"}},
-						Type:  &ast.Ident{Name: component},
-					}},
+						Type:  &ast.Ident{Name: functionComponent},
+					},
+					},
 				},
-				Name: &ast.Ident{Name: "Props"},
+				Name: &ast.Ident{Name: "HackRender"},
 				Type: &ast.FuncType{
 					Params: &ast.FieldList{
-						List: []*ast.Field{},
+						List: []*ast.Field{{
+							Names: []*ast.Ident{{Name: "props"}},
+							Type: &ast.StarExpr{
+								X: &ast.SelectorExpr{
+									X:   &ast.Ident{Name: "js"},
+									Sel: &ast.Ident{Name: "Object"},
+								},
+							},
+						}},
 					},
 					Results: &ast.FieldList{
 						List: []*ast.Field{{Type: &ast.SelectorExpr{
 							X:   &ast.Ident{Name: "react"},
-							Sel: &ast.Ident{Name: "Props"},
+							Sel: &ast.Ident{Name: "Element"},
 						}}},
 					},
 				},
 				Body: &ast.BlockStmt{
-					List: []ast.Stmt{
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{&ast.Ident{Name: "props"}},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{&ast.UnaryExpr{
-								Op: token.AND,
-								X: &ast.CompositeLit{
-									Type: &ast.Ident{
-										Name: props,
+					List: []ast.Stmt{&ast.AssignStmt{
+						Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
+						Tok: token.DEFINE,
+						Rhs: []ast.Expr{&ast.UnaryExpr{
+							Op: token.AND,
+							X:  &ast.CompositeLit{Type: &ast.Ident{Name: "FunProps"}},
+						}},
+					}, &ast.ExprStmt{
+						X: &ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "copier"},
+								Sel: &ast.Ident{Name: "Copy"},
+							},
+							Args: []ast.Expr{
+								&ast.Ident{Name: "newProps"},
+								&ast.CallExpr{
+									Fun: &ast.SelectorExpr{
+										X:   &ast.Ident{Name: "react"},
+										Sel: &ast.Ident{Name: "UnwrapValue"},
 									},
-								},
-							}},
-						},
-						&ast.ExprStmt{
-							X: &ast.CallExpr{
-								Fun: &ast.SelectorExpr{
-									X:   &ast.Ident{Name: "copier"},
-									Sel: &ast.Ident{Name: "Copy"},
-								},
-								Args: []ast.Expr{
-									&ast.Ident{Name: "props"},
-									&ast.CallExpr{
-										Fun: &ast.SelectorExpr{
-											X: &ast.SelectorExpr{
-												X:   &ast.Ident{Name: "a"},
-												Sel: &ast.Ident{Name: "ComponentDef"},
+									Args: []ast.Expr{
+										&ast.CallExpr{
+											Fun: &ast.SelectorExpr{
+												X:   &ast.Ident{Name: "props"},
+												Sel: &ast.Ident{Name: "Get"},
 											},
-											Sel: &ast.Ident{Name: "Props"},
+											Args: []ast.Expr{&ast.BasicLit{
+												Kind:  token.STRING,
+												Value: "\"_props\"",
+											}},
 										},
 									},
 								},
 							},
 						},
-						&ast.ReturnStmt{
-							Results: []ast.Expr{
-								&ast.Ident{Name: "props"},
+					}, &ast.ReturnStmt{
+						Results: []ast.Expr{&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "a"},
+								Sel: &ast.Ident{Name: "Default"},
+							},
+							Args: []ast.Expr{
+								&ast.Ident{Name: "newProps"},
+							},
+						}},
+					}},
+				},
+			})
+
+			funElem := ast.NewObj(ast.Fun, buildComponentElem)
+			funElem.Decl = &ast.FuncDecl{
+				Name: &ast.Ident{Name: buildComponentElem},
+				Type: &ast.FuncType{
+					Params: &ast.FieldList{
+						List: []*ast.Field{
+							{
+								Names: []*ast.Ident{{Name: "props"}},
+								Type: &ast.SelectorExpr{
+									X:   &ast.Ident{Name: "react"},
+									Sel: &ast.Ident{Name: "Props"},
+								},
+							},
+							{
+								Names: []*ast.Ident{{Name: "children"}},
+								Type: &ast.Ellipsis{
+									Elt: &ast.SelectorExpr{
+										X:   &ast.Ident{Name: "react"},
+										Sel: &ast.Ident{Name: "Element"},
+									},
+								},
+							},
+						},
+					},
+					Results: &ast.FieldList{
+						List: []*ast.Field{
+							{
+								Type: &ast.SelectorExpr{
+									X:   &ast.Ident{Name: "react"},
+									Sel: &ast.Ident{Name: "Element"},
+								},
 							},
 						},
 					},
 				},
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						&ast.ReturnStmt{
+							Results: []ast.Expr{&ast.CallExpr{
+								Fun: &ast.IndexExpr{
+									X: &ast.SelectorExpr{
+										X:   &ast.Ident{Name: "react"},
+										Sel: &ast.Ident{Name: "CreateFunctionElement"},
+									},
+									Index: &ast.Ident{Name: props},
+								},
+								Args: []ast.Expr{
+									&ast.CompositeLit{
+										Type: &ast.Ident{Name: functionComponent},
+									},
+									&ast.Ident{Name: "props"},
+									&ast.Ident{Name: "children"},
+								},
+								Ellipsis: 1,
+							}},
+						},
+					},
+				},
 			}
-			file.Decls = append(file.Decls, getProps)
+			if decl, ok := funElem.Decl.(*ast.FuncDecl); ok {
+				file.Decls = append(file.Decls, decl)
+			}
+			file.Scope.Objects[buildComponentElem] = funElem
+		}
+
+		if isWatch {
+			if component != "" {
+				getProps := &ast.FuncDecl{
+					Recv: &ast.FieldList{
+						List: []*ast.Field{{
+							Names: []*ast.Ident{{Name: "a"}},
+							Type:  &ast.Ident{Name: component},
+						}},
+					},
+					Name: &ast.Ident{Name: "Props"},
+					Type: &ast.FuncType{
+						Params: &ast.FieldList{
+							List: []*ast.Field{},
+						},
+						Results: &ast.FieldList{
+							List: []*ast.Field{{Type: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "react"},
+								Sel: &ast.Ident{Name: "Props"},
+							}}},
+						},
+					},
+					Body: &ast.BlockStmt{
+						List: []ast.Stmt{
+							&ast.AssignStmt{
+								Lhs: []ast.Expr{&ast.Ident{Name: "props"}},
+								Tok: token.DEFINE,
+								Rhs: []ast.Expr{&ast.UnaryExpr{
+									Op: token.AND,
+									X: &ast.CompositeLit{
+										Type: &ast.Ident{
+											Name: props,
+										},
+									},
+								}},
+							},
+							&ast.ExprStmt{
+								X: &ast.CallExpr{
+									Fun: &ast.SelectorExpr{
+										X:   &ast.Ident{Name: "copier"},
+										Sel: &ast.Ident{Name: "Copy"},
+									},
+									Args: []ast.Expr{
+										&ast.Ident{Name: "props"},
+										&ast.CallExpr{
+											Fun: &ast.SelectorExpr{
+												X: &ast.SelectorExpr{
+													X:   &ast.Ident{Name: "a"},
+													Sel: &ast.Ident{Name: "ComponentDef"},
+												},
+												Sel: &ast.Ident{Name: "Props"},
+											},
+										},
+									},
+								},
+							},
+							&ast.ReturnStmt{
+								Results: []ast.Expr{
+									&ast.Ident{Name: "props"},
+								},
+							},
+						},
+					},
+				}
+				file.Decls = append(file.Decls, getProps)
+			}
 
 			importPathValue := fmt.Sprintf("\"%s\"", importPath)
 			module := &ast.GenDecl{
@@ -523,46 +685,48 @@ func initTemplate(file *ast.File, component string) {
 							Sel: &ast.Ident{Name: "Props"},
 						},
 					},
+					{
+						Names: []*ast.Ident{{Name: "children"}},
+						Type: &ast.Ellipsis{
+							Elt: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "react"},
+								Sel: &ast.Ident{Name: "Element"},
+							},
+						},
+					},
 				},
 			},
 			Results: &ast.FieldList{
-				List: []*ast.Field{},
+				List: []*ast.Field{
+					{
+						Type: &ast.SelectorExpr{
+							X:   &ast.Ident{Name: "react"},
+							Sel: &ast.Ident{Name: "Element"},
+						},
+					},
+				},
 			},
 		},
 		Body: &ast.BlockStmt{
-			List: []ast.Stmt{},
+			List: []ast.Stmt{
+				&ast.ReturnStmt{
+					Results: []ast.Expr{&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   &ast.Ident{Name: "react"},
+							Sel: &ast.Ident{Name: "CreateElement"},
+						},
+						Args: []ast.Expr{
+							&ast.Ident{Name: buildComponent},
+							&ast.Ident{Name: "props"},
+							&ast.Ident{Name: "children"},
+						},
+						Ellipsis: 1,
+					}},
+				},
+			},
 		},
 	}
 	if decl, ok := funElem.Decl.(*ast.FuncDecl); ok {
-		decl.Type.Params.List = append(decl.Type.Params.List, &ast.Field{
-			Names: []*ast.Ident{{Name: "children"}},
-			Type: &ast.Ellipsis{
-				Elt: &ast.SelectorExpr{
-					X:   &ast.Ident{Name: "react"},
-					Sel: &ast.Ident{Name: "Element"},
-				},
-			},
-		})
-		decl.Type.Results.List = append(decl.Type.Results.List, &ast.Field{
-			Type: &ast.SelectorExpr{
-				X:   &ast.Ident{Name: "react"},
-				Sel: &ast.Ident{Name: "Element"},
-			},
-		})
-		decl.Body.List = append(decl.Body.List, &ast.ReturnStmt{
-			Results: []ast.Expr{&ast.CallExpr{
-				Fun: &ast.SelectorExpr{
-					X:   &ast.Ident{Name: "react"},
-					Sel: &ast.Ident{Name: "CreateElement"},
-				},
-				Args: []ast.Expr{
-					&ast.Ident{Name: buildComponent},
-					&ast.Ident{Name: "props"},
-					&ast.Ident{Name: "children"},
-				},
-				Ellipsis: 1,
-			}},
-		})
 		file.Decls = append(file.Decls, decl)
 	}
 	file.Scope.Objects[buildComponentElem] = funElem

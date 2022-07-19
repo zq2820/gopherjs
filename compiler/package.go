@@ -644,6 +644,9 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 			fields[i] = fmt.Sprintf(`{prop: "%s", name: %s, embedded: %t, exported: %t, typ: %s, tag: %s}`, fieldName(t, i), encodeString(field.Name()), field.Anonymous(), field.Exported(), fc.typeName(field.Type()), encodeString(t.Tag(i)))
 		}
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
+	case *types.TypeParam:
+		// 处理泛型
+		return fmt.Sprintf("%s.methods", t.Constraint().(*types.Named).Obj().Name())
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
 		panic(err)
