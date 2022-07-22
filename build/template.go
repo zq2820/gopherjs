@@ -711,12 +711,15 @@ func initTemplate(file *ast.File, component string) {
 			List: []ast.Stmt{
 				&ast.ReturnStmt{
 					Results: []ast.Expr{&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "react"},
-							Sel: &ast.Ident{Name: "CreateElement"},
+						Fun: &ast.IndexExpr{
+							X: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "react"},
+								Sel: &ast.Ident{Name: "CreateElement"},
+							},
+							Index: &ast.Ident{Name: component},
 						},
 						Args: []ast.Expr{
-							&ast.Ident{Name: buildComponent},
+							&ast.CompositeLit{Type: &ast.Ident{Name: component}},
 							&ast.Ident{Name: "props"},
 							&ast.Ident{Name: "children"},
 						},
@@ -730,41 +733,4 @@ func initTemplate(file *ast.File, component string) {
 		file.Decls = append(file.Decls, decl)
 	}
 	file.Scope.Objects[buildComponentElem] = funElem
-
-	renderFun := &ast.FuncDecl{
-		Recv: &ast.FieldList{
-			List: []*ast.Field{{
-				Names: []*ast.Ident{{Name: "a"}},
-				Type:  &ast.Ident{Name: component},
-			}},
-		},
-		Name: &ast.Ident{Name: "RendersElement"},
-		Type: &ast.FuncType{
-			Results: &ast.FieldList{
-				List: []*ast.Field{{
-					Type: &ast.SelectorExpr{
-						X:   &ast.Ident{Name: "react"},
-						Sel: &ast.Ident{Name: "Element"},
-					},
-				}},
-			},
-			Params: &ast.FieldList{
-				List: []*ast.Field{},
-			},
-		},
-		Body: &ast.BlockStmt{
-			List: []ast.Stmt{},
-		},
-	}
-	renderFun.Body.List = append(renderFun.Body.List, &ast.ReturnStmt{
-		Results: []ast.Expr{
-			&ast.CallExpr{
-				Fun: &ast.SelectorExpr{
-					X:   &ast.Ident{Name: "a"},
-					Sel: &ast.Ident{Name: "Render"},
-				},
-			},
-		},
-	})
-	file.Decls = append(file.Decls, renderFun)
 }
