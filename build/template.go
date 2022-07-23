@@ -67,41 +67,6 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 		}
 		for _, decl := range file.Decls {
 			switch c := decl.(type) {
-			case *ast.FuncDecl:
-				if c.Name.Name[0] >= 'A' && c.Name.Name[0] <= 'Z' {
-					if c.Recv == nil {
-						arg := "nil"
-						if len(c.Type.Params.List) > 0 {
-							arg = c.Type.Params.List[0].Names[0].Name
-						}
-						args := []ast.Expr{
-							&ast.Ident{Name: arg},
-						}
-						if len(c.Type.Params.List) > 1 {
-							args = append(args, &ast.Ident{Name: c.Type.Params.List[1].Names[0].Name})
-						}
-
-						var callExpr string
-						if !isWatch {
-							callExpr = buildComponentElem
-						} else {
-							callExpr = "build_go_react_hotElem"
-						}
-						c.Body = &ast.BlockStmt{
-							List: []ast.Stmt{
-								&ast.ReturnStmt{
-									Results: []ast.Expr{
-										&ast.CallExpr{
-											Fun:      &ast.Ident{Name: callExpr},
-											Args:     args,
-											Ellipsis: 1,
-										},
-									},
-								},
-							},
-						}
-					}
-				}
 			case *ast.GenDecl:
 				if c.Tok == token.IMPORT {
 					hasJs := false
@@ -397,229 +362,229 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 			file.Decls = append(file.Decls, module)
 
 			/** 热更新包裹组件 */
-			hotTypeSpec := &ast.TypeSpec{
-				Name: &ast.Ident{Name: "_go_react_hot"},
-				Type: &ast.StructType{
-					Fields: &ast.FieldList{
-						List: []*ast.Field{{Type: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "react"},
-							Sel: &ast.Ident{Name: "ComponentDef"},
-						}}},
-					},
-				},
-			}
+			// hotTypeSpec := &ast.TypeSpec{
+			// 	Name: &ast.Ident{Name: "_go_react_hot"},
+			// 	Type: &ast.StructType{
+			// 		Fields: &ast.FieldList{
+			// 			List: []*ast.Field{{Type: &ast.SelectorExpr{
+			// 				X:   &ast.Ident{Name: "react"},
+			// 				Sel: &ast.Ident{Name: "ComponentDef"},
+			// 			}}},
+			// 		},
+			// 	},
+			// }
 
-			hotComponent := ast.NewObj(ast.Typ, "_go_react_hot")
-			hotComponent.Decl = hotTypeSpec
-			file.Scope.Objects["_go_react_hot"] = hotComponent
+			// hotComponent := ast.NewObj(ast.Typ, "_go_react_hot")
+			// hotComponent.Decl = hotTypeSpec
+			// file.Scope.Objects["_go_react_hot"] = hotComponent
 
-			file.Decls = append(file.Decls, &ast.GenDecl{
-				Tok: token.TYPE,
-				Specs: []ast.Spec{
-					hotTypeSpec,
-				},
-			})
-			file.Decls = append(file.Decls, &ast.FuncDecl{
-				Recv: &ast.FieldList{
-					List: []*ast.Field{{
-						Names: []*ast.Ident{{Name: "a"}},
-						Type:  &ast.Ident{Name: "_go_react_hot"},
-					}},
-				},
-				Name: &ast.Ident{Name: "Render"},
-				Type: &ast.FuncType{
-					Params: &ast.FieldList{},
-					Results: &ast.FieldList{
-						List: []*ast.Field{{Type: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "react"},
-							Sel: &ast.Ident{Name: "Element"},
-						}}},
-					},
-				},
-				Body: &ast.BlockStmt{
-					List: []ast.Stmt{
-						&ast.ReturnStmt{
-							Results: []ast.Expr{
-								&ast.CallExpr{
-									Fun: &ast.TypeAssertExpr{
-										X: &ast.IndexExpr{
-											X: &ast.SelectorExpr{
-												X:   &ast.Ident{Name: "chunks"},
-												Sel: &ast.Ident{Name: "GoChunks"},
-											},
-											Index: &ast.BasicLit{
-												Kind:  token.STRING,
-												Value: importPathValue,
-											},
-										},
-										Type: &ast.FuncType{
-											Params: &ast.FieldList{
-												List: []*ast.Field{{
-													Names: []*ast.Ident{{Name: "props"}},
-													Type: &ast.SelectorExpr{
-														X:   &ast.Ident{Name: "react"},
-														Sel: &ast.Ident{Name: "Props"},
-													},
-												}, {
-													Names: []*ast.Ident{{Name: "children"}},
-													Type: &ast.Ellipsis{
-														Elt: &ast.SelectorExpr{
-															X:   &ast.Ident{Name: "react"},
-															Sel: &ast.Ident{Name: "Element"},
-														},
-														Ellipsis: 1,
-													},
-												}},
-											},
-											Results: &ast.FieldList{
-												List: []*ast.Field{{
-													Type: &ast.SelectorExpr{
-														X:   &ast.Ident{Name: "react"},
-														Sel: &ast.Ident{Name: "Element"},
-													},
-												}},
-											},
-										},
-									},
-									Args: []ast.Expr{
-										&ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X:   &ast.Ident{Name: "a"},
-												Sel: &ast.Ident{Name: "Props"},
-											},
-											Args: []ast.Expr{},
-										},
-										&ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X:   &ast.Ident{Name: "a"},
-												Sel: &ast.Ident{Name: "Children"},
-											},
-											Args: []ast.Expr{},
-										},
-									},
-									Ellipsis: 1,
-								},
-							},
-						},
-					},
-				},
-			})
-			file.Decls = append(file.Decls, &ast.FuncDecl{
-				Recv: &ast.FieldList{
-					List: []*ast.Field{{
-						Names: []*ast.Ident{{Name: "a"}},
-						Type:  &ast.Ident{Name: "_go_react_hot"},
-					}},
-				},
-				Name: &ast.Ident{Name: "ComponentDidMount"},
-				Type: &ast.FuncType{Params: &ast.FieldList{}},
-				Body: &ast.BlockStmt{List: []ast.Stmt{
-					&ast.AssignStmt{
-						Lhs: []ast.Expr{&ast.Ident{Name: "dependencies"}},
-						Tok: token.DEFINE,
-						Rhs: []ast.Expr{&ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X: &ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X: &ast.SelectorExpr{
-											X:   &ast.Ident{Name: "js"},
-											Sel: &ast.Ident{Name: "Global"},
-										},
-										Sel: &ast.Ident{Name: "Get"},
-									},
-									Args: []ast.Expr{
-										&ast.BasicLit{
-											Kind:  token.STRING,
-											Value: "\"window\"",
-										},
-									},
-								},
-								Sel: &ast.Ident{Name: "Get"},
-							},
-							Args: []ast.Expr{&ast.BasicLit{
-								Kind:  token.STRING,
-								Value: "\"dependencies\"",
-							}},
-						}},
-					},
-					&ast.IfStmt{
-						Cond: &ast.BinaryExpr{
-							X: &ast.CallExpr{
-								Fun: &ast.SelectorExpr{
-									X:   &ast.Ident{Name: "dependencies"},
-									Sel: &ast.Ident{Name: "Get"},
-								},
-								Args: []ast.Expr{&ast.BasicLit{
-									Kind:  token.STRING,
-									Value: importPathValue,
-								}},
-							},
-							Op: token.EQL,
-							Y: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "js"},
-								Sel: &ast.Ident{Name: "Undefined"},
-							},
-						},
-						Body: &ast.BlockStmt{
-							List: []ast.Stmt{
-								&ast.ExprStmt{
-									X: &ast.CallExpr{
-										Fun: &ast.SelectorExpr{
-											X:   &ast.Ident{Name: "dependencies"},
-											Sel: &ast.Ident{Name: "Set"},
-										},
-										Args: []ast.Expr{&ast.BasicLit{
-											Kind:  token.STRING,
-											Value: importPathValue,
-										}, &ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X: &ast.CallExpr{
-													Fun: &ast.SelectorExpr{
-														X: &ast.SelectorExpr{
-															X:   &ast.Ident{Name: "js"},
-															Sel: &ast.Ident{Name: "Global"},
-														},
-														Sel: &ast.Ident{Name: "Get"},
-													},
-													Args: []ast.Expr{&ast.BasicLit{
-														Kind:  token.STRING,
-														Value: "\"Array\"",
-													}},
-												},
-												Sel: &ast.Ident{Name: "New"},
-											},
-										}},
-									},
-								},
-							},
-						},
-					},
-					&ast.ExprStmt{
-						X: &ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X: &ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X:   &ast.Ident{Name: "dependencies"},
-										Sel: &ast.Ident{Name: "Get"},
-									},
-									Args: []ast.Expr{&ast.BasicLit{
-										Kind:  token.STRING,
-										Value: importPathValue,
-									}},
-								},
-								Sel: &ast.Ident{Name: "Call"},
-							},
-							Args: []ast.Expr{&ast.BasicLit{
-								Kind:  token.STRING,
-								Value: "\"push\"",
-							}, &ast.Ident{
-								Name: "a",
-							}},
-						},
-					},
-				}},
-			})
-			initTemplate(file, "_go_react_hot")
+			// file.Decls = append(file.Decls, &ast.GenDecl{
+			// 	Tok: token.TYPE,
+			// 	Specs: []ast.Spec{
+			// 		hotTypeSpec,
+			// 	},
+			// })
+			// file.Decls = append(file.Decls, &ast.FuncDecl{
+			// 	Recv: &ast.FieldList{
+			// 		List: []*ast.Field{{
+			// 			Names: []*ast.Ident{{Name: "a"}},
+			// 			Type:  &ast.Ident{Name: "_go_react_hot"},
+			// 		}},
+			// 	},
+			// 	Name: &ast.Ident{Name: "Render"},
+			// 	Type: &ast.FuncType{
+			// 		Params: &ast.FieldList{},
+			// 		Results: &ast.FieldList{
+			// 			List: []*ast.Field{{Type: &ast.SelectorExpr{
+			// 				X:   &ast.Ident{Name: "react"},
+			// 				Sel: &ast.Ident{Name: "Element"},
+			// 			}}},
+			// 		},
+			// 	},
+			// 	Body: &ast.BlockStmt{
+			// 		List: []ast.Stmt{
+			// 			&ast.ReturnStmt{
+			// 				Results: []ast.Expr{
+			// 					&ast.CallExpr{
+			// 						Fun: &ast.TypeAssertExpr{
+			// 							X: &ast.IndexExpr{
+			// 								X: &ast.SelectorExpr{
+			// 									X:   &ast.Ident{Name: "chunks"},
+			// 									Sel: &ast.Ident{Name: "GoChunks"},
+			// 								},
+			// 								Index: &ast.BasicLit{
+			// 									Kind:  token.STRING,
+			// 									Value: importPathValue,
+			// 								},
+			// 							},
+			// 							Type: &ast.FuncType{
+			// 								Params: &ast.FieldList{
+			// 									List: []*ast.Field{{
+			// 										Names: []*ast.Ident{{Name: "props"}},
+			// 										Type: &ast.SelectorExpr{
+			// 											X:   &ast.Ident{Name: "react"},
+			// 											Sel: &ast.Ident{Name: "Props"},
+			// 										},
+			// 									}, {
+			// 										Names: []*ast.Ident{{Name: "children"}},
+			// 										Type: &ast.Ellipsis{
+			// 											Elt: &ast.SelectorExpr{
+			// 												X:   &ast.Ident{Name: "react"},
+			// 												Sel: &ast.Ident{Name: "Element"},
+			// 											},
+			// 											Ellipsis: 1,
+			// 										},
+			// 									}},
+			// 								},
+			// 								Results: &ast.FieldList{
+			// 									List: []*ast.Field{{
+			// 										Type: &ast.SelectorExpr{
+			// 											X:   &ast.Ident{Name: "react"},
+			// 											Sel: &ast.Ident{Name: "Element"},
+			// 										},
+			// 									}},
+			// 								},
+			// 							},
+			// 						},
+			// 						Args: []ast.Expr{
+			// 							&ast.CallExpr{
+			// 								Fun: &ast.SelectorExpr{
+			// 									X:   &ast.Ident{Name: "a"},
+			// 									Sel: &ast.Ident{Name: "Props"},
+			// 								},
+			// 								Args: []ast.Expr{},
+			// 							},
+			// 							&ast.CallExpr{
+			// 								Fun: &ast.SelectorExpr{
+			// 									X:   &ast.Ident{Name: "a"},
+			// 									Sel: &ast.Ident{Name: "Children"},
+			// 								},
+			// 								Args: []ast.Expr{},
+			// 							},
+			// 						},
+			// 						Ellipsis: 1,
+			// 					},
+			// 				},
+			// 			},
+			// 		},
+			// 	},
+			// })
+			// file.Decls = append(file.Decls, &ast.FuncDecl{
+			// 	Recv: &ast.FieldList{
+			// 		List: []*ast.Field{{
+			// 			Names: []*ast.Ident{{Name: "a"}},
+			// 			Type:  &ast.Ident{Name: "_go_react_hot"},
+			// 		}},
+			// 	},
+			// 	Name: &ast.Ident{Name: "ComponentDidMount"},
+			// 	Type: &ast.FuncType{Params: &ast.FieldList{}},
+			// 	Body: &ast.BlockStmt{List: []ast.Stmt{
+			// 		&ast.AssignStmt{
+			// 			Lhs: []ast.Expr{&ast.Ident{Name: "dependencies"}},
+			// 			Tok: token.DEFINE,
+			// 			Rhs: []ast.Expr{&ast.CallExpr{
+			// 				Fun: &ast.SelectorExpr{
+			// 					X: &ast.CallExpr{
+			// 						Fun: &ast.SelectorExpr{
+			// 							X: &ast.SelectorExpr{
+			// 								X:   &ast.Ident{Name: "js"},
+			// 								Sel: &ast.Ident{Name: "Global"},
+			// 							},
+			// 							Sel: &ast.Ident{Name: "Get"},
+			// 						},
+			// 						Args: []ast.Expr{
+			// 							&ast.BasicLit{
+			// 								Kind:  token.STRING,
+			// 								Value: "\"window\"",
+			// 							},
+			// 						},
+			// 					},
+			// 					Sel: &ast.Ident{Name: "Get"},
+			// 				},
+			// 				Args: []ast.Expr{&ast.BasicLit{
+			// 					Kind:  token.STRING,
+			// 					Value: "\"dependencies\"",
+			// 				}},
+			// 			}},
+			// 		},
+			// 		&ast.IfStmt{
+			// 			Cond: &ast.BinaryExpr{
+			// 				X: &ast.CallExpr{
+			// 					Fun: &ast.SelectorExpr{
+			// 						X:   &ast.Ident{Name: "dependencies"},
+			// 						Sel: &ast.Ident{Name: "Get"},
+			// 					},
+			// 					Args: []ast.Expr{&ast.BasicLit{
+			// 						Kind:  token.STRING,
+			// 						Value: importPathValue,
+			// 					}},
+			// 				},
+			// 				Op: token.EQL,
+			// 				Y: &ast.SelectorExpr{
+			// 					X:   &ast.Ident{Name: "js"},
+			// 					Sel: &ast.Ident{Name: "Undefined"},
+			// 				},
+			// 			},
+			// 			Body: &ast.BlockStmt{
+			// 				List: []ast.Stmt{
+			// 					&ast.ExprStmt{
+			// 						X: &ast.CallExpr{
+			// 							Fun: &ast.SelectorExpr{
+			// 								X:   &ast.Ident{Name: "dependencies"},
+			// 								Sel: &ast.Ident{Name: "Set"},
+			// 							},
+			// 							Args: []ast.Expr{&ast.BasicLit{
+			// 								Kind:  token.STRING,
+			// 								Value: importPathValue,
+			// 							}, &ast.CallExpr{
+			// 								Fun: &ast.SelectorExpr{
+			// 									X: &ast.CallExpr{
+			// 										Fun: &ast.SelectorExpr{
+			// 											X: &ast.SelectorExpr{
+			// 												X:   &ast.Ident{Name: "js"},
+			// 												Sel: &ast.Ident{Name: "Global"},
+			// 											},
+			// 											Sel: &ast.Ident{Name: "Get"},
+			// 										},
+			// 										Args: []ast.Expr{&ast.BasicLit{
+			// 											Kind:  token.STRING,
+			// 											Value: "\"Array\"",
+			// 										}},
+			// 									},
+			// 									Sel: &ast.Ident{Name: "New"},
+			// 								},
+			// 							}},
+			// 						},
+			// 					},
+			// 				},
+			// 			},
+			// 		},
+			// 		&ast.ExprStmt{
+			// 			X: &ast.CallExpr{
+			// 				Fun: &ast.SelectorExpr{
+			// 					X: &ast.CallExpr{
+			// 						Fun: &ast.SelectorExpr{
+			// 							X:   &ast.Ident{Name: "dependencies"},
+			// 							Sel: &ast.Ident{Name: "Get"},
+			// 						},
+			// 						Args: []ast.Expr{&ast.BasicLit{
+			// 							Kind:  token.STRING,
+			// 							Value: importPathValue,
+			// 						}},
+			// 					},
+			// 					Sel: &ast.Ident{Name: "Call"},
+			// 				},
+			// 				Args: []ast.Expr{&ast.BasicLit{
+			// 					Kind:  token.STRING,
+			// 					Value: "\"push\"",
+			// 				}, &ast.Ident{
+			// 					Name: "a",
+			// 				}},
+			// 			},
+			// 		},
+			// 	}},
+			// })
+			// initTemplate(file, "_go_react_hot")
 		}
 	}
 }

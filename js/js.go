@@ -118,8 +118,8 @@ func InternalObject(i interface{}) *Object {
 }
 
 // MakeFunc wraps a function and gives access to the values of JavaScript's "this" and "arguments" keywords.
-func MakeFunc(fn func(this *Object, arguments []*Object) interface{}) *Object {
-	return Global.Call("$makeFunc", InternalObject(fn))
+func MakeFunc(fn func(this *Object, arguments []*Object) interface{}, args ...string) *Object {
+	return Global.Call("$makeFunc", InternalObject(fn), args)
 }
 
 // Keys returns the keys of the given JavaScript object.
