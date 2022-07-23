@@ -558,7 +558,7 @@ func makeInt(f flag, bits uint64, t Type) Value {
 	return Value{typ, ptr, f | flagIndir | flag(typ.Kind())}
 }
 
-func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
+func MakeFunc(typ Type, fn func(args []Value) (results []Value), args ...string) Value {
 	if typ.Kind() != Func {
 		panic("reflect: call of MakeFunc with non-Func type")
 	}
