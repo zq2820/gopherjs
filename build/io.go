@@ -49,7 +49,7 @@ func NewDevServer(port int) *DevServer {
 		files:  make(map[string][]byte),
 		packet: newPacket(),
 	}
-	copyDir("./helloworld/public", "", server)
+	copyDir("./public", "", server)
 
 	go (func() {
 		upgrade := websocket.Upgrader{}
