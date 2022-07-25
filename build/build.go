@@ -618,6 +618,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	dir, _ := os.Getwd()
 	if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
 		s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
@@ -625,33 +626,37 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			astutils.Apply(file, func(c *astutils.Cursor) bool {
 				switch expr := c.Node().(type) {
 				case *ast.CallExpr:
-					switch ident := expr.Fun.(type) {
-					case *ast.Ident:
-						if ident.Name == "Import" {
-							oldVal := expr.Args[0].(*ast.BasicLit).Value
-							if isCss(oldVal[1 : len(oldVal)-1]) {
-								val := "." + path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1])
-								expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-								s.scssCompiler.Add(val, pkg.Package.Dir+"/"+pkg.Package.Name)
-								break
-							}
-
-							for suffix := range contentType {
-								if TestExpr(fmt.Sprintf(`\.%s"$`, suffix), expr.Args[0].(*ast.BasicLit).Value) {
+					switch selectorExpr := expr.Fun.(type) {
+					case *ast.SelectorExpr:
+						if x, ok := selectorExpr.X.(*ast.Ident); ok {
+							if x.Name == "chunks" {
+								if selectorExpr.Sel.Name == "Import" {
 									oldVal := expr.Args[0].(*ast.BasicLit).Value
-									val := (path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1]))[1:]
-									expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-									image, _ := os.ReadFile(val)
-									if s.options.Watch {
+									if isCss(oldVal[1 : len(oldVal)-1]) {
+										val := "." + path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1])
 										expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-										s.io.Write(val, image)
-									} else {
-										hash := md5.New()
-										filename := fmt.Sprintf("%x.%s", hash.Sum([]byte{}), suffix)
-										expr.Args[0].(*ast.BasicLit).Value = "\"" + filename + "\""
-										s.io.Write(filename, image)
+										s.scssCompiler.Add(val, pkg.Package.Dir+"/"+pkg.Package.Name)
+										break
 									}
-									break
+
+									for suffix := range contentType {
+										if TestExpr(fmt.Sprintf(`\.%s"$`, suffix), expr.Args[0].(*ast.BasicLit).Value) {
+											oldVal := expr.Args[0].(*ast.BasicLit).Value
+											val := (path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1]))[1:]
+											expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
+											image, _ := os.ReadFile(val)
+											if s.options.Watch {
+												expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
+												s.io.Write(val, image)
+											} else {
+												hash := md5.New()
+												filename := fmt.Sprintf("%x.%s", hash.Sum([]byte{}), suffix)
+												expr.Args[0].(*ast.BasicLit).Value = "\"" + filename + "\""
+												s.io.Write(filename, image)
+											}
+											break
+										}
+									}
 								}
 							}
 						}
@@ -661,6 +666,14 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 			}, nil)
 			if TestExpr(`\.x\.go$`, pkg.GoFiles[i]) {
 				GenerateTemplate(file, pkg.ImportPath, s.options.Watch)
+			}
+		}
+	}
+
+	if pkg.Package.ImportPath == "github.com/gopherjs/gopherjs/chunks" {
+		for _, file := range files {
+			if IsWatch, ok := file.Scope.Objects["IsWatch"]; ok {
+				IsWatch.Decl.(*ast.ValueSpec).Values[0].(*ast.Ident).Name = fmt.Sprintf("%t", s.options.Watch)
 			}
 		}
 	}

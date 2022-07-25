@@ -19,7 +19,7 @@ type HtmlInstance struct {
 }
 
 func InitHtml(entry string, dist string, io IoWriter) *HtmlInstance {
-	res, readErr := os.ReadFile(entry + "/index.html")
+	res, readErr := os.ReadFile(entry + "/public/index.html")
 	content := ""
 	if readErr == nil {
 		content = string(res)

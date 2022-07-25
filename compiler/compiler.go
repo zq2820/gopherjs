@@ -296,7 +296,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string, isW
         for (var i = 0; i < chunks.length; i ++) {
           if (window.dependencies[chunks[i][0]]) {
             for(var j = 0; j < window.dependencies[chunks[i][0]].length; j ++) {
-              window.dependencies[chunks[i][0]][j].forceUpdate()
+              window.dependencies[chunks[i][0]][j].$val.ForceUpdate()
             }
           }
         }

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 
 	"github.com/gorilla/websocket"
@@ -48,6 +49,7 @@ func NewDevServer(port int) *DevServer {
 		files:  make(map[string][]byte),
 		packet: newPacket(),
 	}
+	copyDir("./helloworld/public", "", server)
 
 	go (func() {
 		upgrade := websocket.Upgrader{}
@@ -111,6 +113,7 @@ func NewFileWriter(dist string) *FileWriter {
 		os.RemoveAll(dist)
 	}
 	os.Mkdir(dist, os.FileMode(0777))
+	copyDir("./public", "./dist", nil)
 	return &FileWriter{
 		dist: dist,
 	}
@@ -140,25 +143,32 @@ func (context *DevServer) Send() {
 
 	message, _ := json.Marshal(context.packet)
 
-	// message := "{"
-	// if len(context.packet.Js) > 0 {
-	// 	message += "\"js\":{"
-	// 	for key, val := range context.packet.Js {
-	// 		message += fmt.Sprintf("\"%s\":\"%s\",", key, val)
-	// 	}
-	// 	message = message[0 : len(message)-1]
-	// 	message += "},"
-	// }
-	// if len(context.packet.Css) > 0 {
-	// 	message += "\"css\":{"
-	// 	for key, val := range context.packet.Css {
-	// 		message += fmt.Sprintf("\"%s\":\"%s\",", key, val)
-	// 	}
-	// }
-	// message = message[0 : len(message)-1]
-	// message += "}}"
 	if context.socket != nil {
 		context.socket.WriteMessage(websocket.BinaryMessage, []byte(message))
 	}
 	context.packet = newPacket()
+}
+
+func copyDir(dir, dist string, server *DevServer) {
+	if files, err := os.ReadDir(dir); err == nil {
+		for _, file := range files {
+			if !(file.IsDir() && file.Name() != "index.html") {
+				if server != nil {
+					if file.IsDir() {
+						copyDir(file.Name(), dist, server)
+					} else {
+						if content, err := os.ReadFile(path.Join(dir, file.Name())); err == nil {
+							server.Write(file.Name(), content)
+						} else {
+							panic(err)
+						}
+					}
+				} else {
+					exec.Command(fmt.Sprintf("cp -r %s %s", file.Name(), dist))
+				}
+			}
+		}
+	} else {
+		panic(err)
+	}
 }

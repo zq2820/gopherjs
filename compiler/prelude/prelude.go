@@ -68,7 +68,7 @@ var $flushConsole = function() {};
 var $throwRuntimeError; /* set by package "runtime" */
 var $throwNilPointerError = function() { $throwRuntimeError("invalid memory address or nil pointer dereference"); };
 var $call = function(fn, rcvr, args) { return fn.apply(rcvr, args); };
-var $makeFunc = function(fn, funcName) { console.log(funcName[0]);return function() { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface); }; };
+var $makeFunc = function(fn, name) { return eval("(function() { return function " + (name ? name : "") + "() { return $externalize(fn(this, new ($sliceType($jsObjectPtr))($global.Array.prototype.slice.call(arguments, []))), $emptyInterface)}})()")};
 var $unused = function(v) {};
 var $print = console.log;
 // Under Node we can emulate print() more closely by avoiding a newline.
