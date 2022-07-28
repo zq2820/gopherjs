@@ -629,7 +629,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 					switch selectorExpr := expr.Fun.(type) {
 					case *ast.SelectorExpr:
 						if x, ok := selectorExpr.X.(*ast.Ident); ok {
-							if x.Name == "chunks" {
+							if x.Name == "es" {
 								if selectorExpr.Sel.Name == "Import" {
 									oldVal := expr.Args[0].(*ast.BasicLit).Value
 									if isCss(oldVal[1 : len(oldVal)-1]) {

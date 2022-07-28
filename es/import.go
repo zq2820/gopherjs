@@ -1,4 +1,4 @@
-package chunks
+package es
 
 import (
 	"regexp"
