@@ -168,8 +168,25 @@ func main() {
 					}
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
-						fmt.Println(err)
+						// fmt.Println(err)
 						return err
+					}
+					if gbuild.GenerateNodeModules(path.Join(args[0]), options.Watch) {
+						mode := "dev"
+						if !options.Watch {
+							mode = "prod"
+						}
+						pkg.JSFiles = append(pkg.JSFiles, fmt.Sprintf("../packages/%s.inc.js", mode))
+						for _, jsFile := range pkg.JSFiles {
+							code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
+							if err != nil {
+								return err
+							}
+							archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+							archive.IncJSCode = append(archive.IncJSCode, code...)
+							archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
+							s.Watcher.Add(filepath.Join(pkg.Dir, jsFile))
+						}
 					}
 					scssCompiler.BuildScss()
 					if len(pkgs) == 1 { // Only consider writing output if single package specified.

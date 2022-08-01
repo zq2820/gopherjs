@@ -168,7 +168,5 @@ func copyDir(dir, dist string, server *DevServer) {
 				}
 			}
 		}
-	} else {
-		panic(err)
 	}
 }

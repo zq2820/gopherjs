@@ -3,6 +3,7 @@ package es
 import (
 	"regexp"
 
+	"github.com/gopherjs/gopherjs/js"
 	"github.com/speps/go-hashids"
 )
 
@@ -37,4 +38,25 @@ func Import(path string) func(...string) string {
 			return path
 		}
 	}
+}
+
+type ImportMethod int
+
+const (
+	DEFAULT ImportMethod = iota + 1
+	NOT_DEFAULT
+)
+
+type ImportOptions struct {
+	AsName    string
+	Method    ImportMethod
+	Container string
+}
+
+func ImportNodeModule(lib string, importName string, options *ImportOptions) *js.Object {
+	name := importName
+	if options != nil {
+		name = options.AsName
+	}
+	return js.Global.Get(lib).Get(options.Container).Get(name)
 }

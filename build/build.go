@@ -561,7 +561,6 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if archive, ok := s.UpToDateArchives[pkg.ImportPath]; ok {
 		return archive, nil
 	}
-
 	var fileInfo os.FileInfo
 	gopherjsBinary, err := os.Executable()
 	if err == nil {
@@ -622,6 +621,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	dir, _ := os.Getwd()
 	if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
 		s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
+		container := path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), pkg.Name)[1:]
 		for i, file := range files {
 			astutils.Apply(file, func(c *astutils.Cursor) bool {
 				switch expr := c.Node().(type) {
@@ -657,6 +657,37 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 											break
 										}
 									}
+								}
+							}
+							if selectorExpr.Sel.Name == "ImportNodeModule" {
+								HandleNodeModules(expr.Args, container)
+								if len(expr.Args) < 3 {
+									expr.Args = append(expr.Args, &ast.UnaryExpr{
+										Op: token.AND,
+										X: &ast.CompositeLit{
+											Type: &ast.SelectorExpr{
+												X:   ast.NewIdent("es"),
+												Sel: ast.NewIdent("ImportOptions"),
+											},
+											Elts: []ast.Expr{&ast.KeyValueExpr{
+												Key: &ast.Ident{Name: "Container"},
+												Value: &ast.BasicLit{
+													Kind:  token.STRING,
+													Value: fmt.Sprintf(`"%s"`, container),
+												},
+											}},
+										},
+									})
+								} else {
+									elts := expr.Args[2].(*ast.UnaryExpr).X.(*ast.CompositeLit).Elts
+									elts = append(elts, &ast.KeyValueExpr{
+										Key: &ast.Ident{Name: "Container"},
+										Value: &ast.BasicLit{
+											Kind:  token.STRING,
+											Value: fmt.Sprintf(`"%s"`, container),
+										},
+									})
+									expr.Args[2].(*ast.UnaryExpr).X.(*ast.CompositeLit).Elts = elts
 								}
 							}
 						}
