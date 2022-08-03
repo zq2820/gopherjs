@@ -18,8 +18,9 @@ type IoWriter interface {
 }
 
 type Packet struct {
-	Js  [][2]string `json:"js"`
-	Css [][2]string `json:"css"`
+	Js     [][2]string `json:"js"`
+	Css    [][2]string `json:"css"`
+	Reload bool        `json:"reload"`
 }
 
 func newPacket() *Packet {
@@ -120,8 +121,9 @@ func NewFileWriter(dist string) *FileWriter {
 }
 
 const (
-	Js  = 1
-	Css = 2
+	Js = iota + 1
+	Css
+	Reload
 )
 
 func (context *DevServer) Stash(packetType int, key string, value []byte) {
@@ -129,6 +131,8 @@ func (context *DevServer) Stash(packetType int, key string, value []byte) {
 		context.packet.Js = append(context.packet.Js, [2]string{key, string(value)})
 	} else if packetType == Css {
 		context.packet.Css = append(context.packet.Css, [2]string{key, string(value)})
+	} else {
+		context.packet.Reload = true
 	}
 }
 

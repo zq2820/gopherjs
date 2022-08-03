@@ -286,6 +286,10 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string, isW
   socket.onmessage = (e) => {
     e.data.text().then((res) => {
       var hot = JSON.parse(res)
+			if (hot.reload) {
+				window.location.reload()
+				return 
+			}
       if (hot.js) {
         var chunks = hot.js
 				var arr = []

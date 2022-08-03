@@ -578,15 +578,33 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		if importedPkgPath == "unsafe" {
 			continue
 		}
-		_, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
+		importedPkg, _, err := s.buildImportPathWithSrcDir(importedPkgPath, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
 
-		// impModTime := importedPkg.SrcModTime
-		// if impModTime.After(pkg.SrcModTime) {
-		// 	pkg.SrcModTime = impModTime
-		// }
+		impModTime := importedPkg.SrcModTime
+
+		if impModTime.After(pkg.SrcModTime) {
+			var isRoot bool
+			for _, file := range importedPkg.GoFiles {
+				if TestExpr(`\.x\.go$`, file) {
+					isRoot = true
+					break
+				}
+			}
+			if !isRoot {
+				for _, file := range pkg.GoFiles {
+					if TestExpr(`\.x\.go$`, file) {
+						isRoot = true
+						break
+					}
+				}
+			}
+			if !isRoot {
+				pkg.SrcModTime = impModTime
+			}
+		}
 	}
 
 	for _, name := range append(pkg.GoFiles, pkg.JSFiles...) {
@@ -622,6 +640,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
 		s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
 		container := path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), pkg.Name)[1:]
+		InitNodeModuleMap(container)
 		for i, file := range files {
 			astutils.Apply(file, func(c *astutils.Cursor) bool {
 				switch expr := c.Node().(type) {
@@ -662,9 +681,8 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 							if selectorExpr.Sel.Name == "ImportNodeModule" {
 								HandleNodeModules(expr.Args, container)
 								if len(expr.Args) < 3 {
-									expr.Args = append(expr.Args, &ast.UnaryExpr{
-										Op: token.AND,
-										X: &ast.CompositeLit{
+									expr.Args = append(expr.Args,
+										&ast.CompositeLit{
 											Type: &ast.SelectorExpr{
 												X:   ast.NewIdent("es"),
 												Sel: ast.NewIdent("ImportOptions"),
@@ -676,10 +694,9 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 													Value: fmt.Sprintf(`"%s"`, container),
 												},
 											}},
-										},
-									})
+										})
 								} else {
-									elts := expr.Args[2].(*ast.UnaryExpr).X.(*ast.CompositeLit).Elts
+									elts := expr.Args[2].(*ast.CompositeLit).Elts
 									elts = append(elts, &ast.KeyValueExpr{
 										Key: &ast.Ident{Name: "Container"},
 										Value: &ast.BasicLit{
@@ -687,7 +704,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 											Value: fmt.Sprintf(`"%s"`, container),
 										},
 									})
-									expr.Args[2].(*ast.UnaryExpr).X.(*ast.CompositeLit).Elts = elts
+									expr.Args[2].(*ast.CompositeLit).Elts = elts
 								}
 							}
 						}

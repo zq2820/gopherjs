@@ -53,10 +53,10 @@ type ImportOptions struct {
 	Container string
 }
 
-func ImportNodeModule(lib string, importName string, options *ImportOptions) *js.Object {
+func ImportNodeModule(lib string, importName string, options ...ImportOptions) *js.Object {
 	name := importName
-	if options != nil {
-		name = options.AsName
+	if options[0].AsName != "" {
+		name = options[0].AsName
 	}
-	return js.Global.Get(lib).Get(options.Container).Get(name)
+	return js.Global.Get(lib).Get(options[0].Container).Get(name)
 }

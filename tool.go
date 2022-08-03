@@ -168,24 +168,38 @@ func main() {
 					}
 					archive, err := s.BuildPackage(pkg)
 					if err != nil {
-						// fmt.Println(err)
+						fmt.Println(err)
 						return err
 					}
-					if gbuild.GenerateNodeModules(path.Join(args[0]), options.Watch) {
-						mode := "dev"
-						if !options.Watch {
-							mode = "prod"
-						}
-						pkg.JSFiles = append(pkg.JSFiles, fmt.Sprintf("../packages/%s.inc.js", mode))
-						for _, jsFile := range pkg.JSFiles {
-							code, err := ioutil.ReadFile(filepath.Join(pkg.Dir, jsFile))
+					if quick, slow := gbuild.GenerateNodeModules(path.Join(args[0]), options.Watch); true {
+						for _, jsFile := range quick {
+							code, err := ioutil.ReadFile(jsFile)
 							if err != nil {
 								return err
 							}
 							archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
 							archive.IncJSCode = append(archive.IncJSCode, code...)
 							archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-							s.Watcher.Add(filepath.Join(pkg.Dir, jsFile))
+						}
+						if s.WatchReady() {
+							packetType := gbuild.Js
+							content := archive.IncJSCode
+							if len(quick) > 1 {
+								packetType = gbuild.Reload
+								content = []byte{}
+							}
+							if devServer, ok := io.(*gbuild.DevServer); ok {
+								devServer.Stash(packetType, "", content)
+							}
+						}
+						for _, jsFile := range slow {
+							code, err := ioutil.ReadFile(jsFile)
+							if err != nil {
+								return err
+							}
+							archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
+							archive.IncJSCode = append(archive.IncJSCode, code...)
+							archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
 						}
 					}
 					scssCompiler.BuildScss()
