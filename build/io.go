@@ -156,7 +156,7 @@ func (context *DevServer) Send() {
 func copyDir(dir, dist string, server *DevServer) {
 	if files, err := os.ReadDir(dir); err == nil {
 		for _, file := range files {
-			if !(file.IsDir() && file.Name() != "index.html") {
+			if !(file.IsDir() || file.Name() == "index.html") {
 				if server != nil {
 					if file.IsDir() {
 						copyDir(file.Name(), dist, server)
@@ -168,7 +168,7 @@ func copyDir(dir, dist string, server *DevServer) {
 						}
 					}
 				} else {
-					exec.Command(fmt.Sprintf("cp -r %s %s", file.Name(), dist))
+					exec.Command("cp", "-r", path.Join(dir, file.Name()), dist).Run()
 				}
 			}
 		}
