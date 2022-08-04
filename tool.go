@@ -184,10 +184,10 @@ func main() {
 						if s.WatchReady() {
 							packetType := gbuild.Js
 							content := archive.IncJSCode
-							if len(quick) > 1 {
-								packetType = gbuild.Reload
-								content = []byte{}
-							}
+							// if len(quick) > 1 {
+							// packetType = gbuild.Reload
+							// content = []byte{}
+							// }
 							if devServer, ok := io.(*gbuild.DevServer); ok {
 								devServer.Stash(packetType, "", content)
 							}
