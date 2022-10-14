@@ -282,7 +282,7 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string, isW
 		w.Write([]byte("\n};\n"))
 		w.Write([]byte("var keys = Object.getOwnPropertyNames(css);\nfor(var i = 0; i < keys.length; i ++){\n  __golang_require_css__(keys[i], css[keys[i]]);\n};\n"))
 		w.Write([]byte(`
-  var socket = new WebSocket("ws://localhost:8888/update/ws");
+  var socket = new WebSocket("ws://gox.dev.com/update/ws");
   socket.onmessage = (e) => {
     e.data.text().then((res) => {
       var hot = JSON.parse(res)
@@ -294,7 +294,9 @@ func WriteProgramCode(pkgs []*Archive, w *SourceMapFilter, goVersion string, isW
         var chunks = hot.js
 				var arr = []
         for (var i = 0; i < chunks.length; i ++) {
-          $mainPkg = eval(chunks[i][1])
+					if (chunks[i][0]) {
+						$mainPkg = eval(chunks[i][1])
+					}
         }
 				$mainPkg.$init()
         for (var i = 0; i < chunks.length; i ++) {

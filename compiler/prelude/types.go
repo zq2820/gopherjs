@@ -400,7 +400,7 @@ var $newType = function(size, kind, string, named, pkg, exported, constructor) {
 };
 
 var $methodSet = function(typ) {
-  if (typ.methodSetCache !== null) {
+  if (typ.methodSetCache) {
     return typ.methodSetCache;
   }
   var base = {};
@@ -562,7 +562,7 @@ var $chanNil = new $Chan(null, 0);
 $chanNil.$sendQueue = $chanNil.$recvQueue = { length: 0, push: function() {}, shift: function() { return undefined; }, indexOf: function() { return -1; } };
 
 var $funcTypes = {};
-var $funcType = function(params, results, variadic) {
+var $funcType = function(params, results, variadic, pkg) {
   var typeKey = $mapArray(params, function(p) { return p.id; }).join(",") + "$" + $mapArray(results, function(r) { return r.id; }).join(",") + "$" + variadic;
   var typ = $funcTypes[typeKey];
   if (typ === undefined) {
@@ -576,7 +576,7 @@ var $funcType = function(params, results, variadic) {
     } else if (results.length > 1) {
       string += " (" + $mapArray(results, function(r) { return r.string; }).join(", ") + ")";
     }
-    typ = $newType(4, $kindFunc, string, false, "", false, null);
+    typ = $newType(4, $kindFunc, string, true, pkg || "", false, null);
     $funcTypes[typeKey] = typ;
     typ.init(params, results, variadic);
   }

@@ -58,7 +58,7 @@ func reflectType(typ *js.Object) *rtype {
 		typ.Set(idReflectType, js.InternalObject(rt))
 
 		methodSet := js.Global.Call("$methodSet", typ)
-		if methodSet.Length() != 0 || typ.Get("named").Bool() {
+		if (methodSet != js.undefined && methodSet.Length() != 0) || typ.Get("named").Bool() {
 			rt.tflag |= tflagUncommon
 			if typ.Get("named").Bool() {
 				rt.tflag |= tflagNamed

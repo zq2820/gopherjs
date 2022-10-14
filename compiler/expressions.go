@@ -775,7 +775,6 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 
 	default:
 		panic(fmt.Sprintf("Unhandled expression: %T\n", e))
-
 	}
 }
 
@@ -1235,6 +1234,18 @@ func (fc *funcContext) translateImplicitConversion(expr ast.Expr, desiredType ty
 			return fc.formatExpr("new $jsObjectPtr(%e)", expr)
 		}
 		if isWrapped(exprType) {
+			if signature, ok := exprType.(*types.Signature); ok {
+				var ident *ast.Ident
+				switch x := expr.(type) {
+				case *ast.SelectorExpr:
+					ident = x.Sel
+				case *ast.Ident:
+					ident = x
+				}
+				if ident != nil {
+					signature.Pkg = fmt.Sprintf("\"%s\"", fc.pkgCtx.Info.Info.Uses[ident].Pkg().Path())
+				}
+			}
 			return fc.formatExpr("new %s(%e)", fc.typeName(exprType), expr)
 		}
 		if _, isStruct := exprType.Underlying().(*types.Struct); isStruct {

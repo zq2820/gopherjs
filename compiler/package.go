@@ -569,7 +569,12 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			DceObjectFilter: t.Name(),
 		}
 		d.DceDeps = collectDependencies(func() {
-			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), funcCtx.initArgs(t.Type())))
+			pkg := "\"\""
+			if signature, ok := t.Type().(*types.Signature); ok {
+				pkg = signature.Pkg
+			}
+
+			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s, %s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), funcCtx.initArgs(t.Type()), pkg))
 		})
 		typeDecls = append(typeDecls, &d)
 	}

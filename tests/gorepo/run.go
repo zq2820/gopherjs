@@ -88,7 +88,7 @@ var knownFails = map[string]failReason{
 	"fixedbugs/issue15975.go": {desc: "also looks valid but deal with after Go 1.7 support is out?"},
 
 	// These are new tests in Go 1.8.
-	"fixedbugs/issue17381.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.{Callers,FuncForPC} behavior in a deferred func with garbage on stack... does GopherJS even support runtime.{Callers,FuncForPC}?"},
+	"fixedbugs/issue17381.go": {category: unsureIfGopherJSSupportsThisFeature, desc: "tests runtime.{Callers,FuncForPC} behavior in a deferred func with garbage on stack... does GopherJS even support runtime.{,FuncForPC}?"},
 	"fixedbugs/issue18149.go": {desc: "//line directives with filenames are not correctly parsed, see https://github.com/gopherjs/gopherjs/issues/553."},
 
 	// These are new tests in Go 1.9.

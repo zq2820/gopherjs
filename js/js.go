@@ -25,6 +25,11 @@
 // Additionally, for a struct containing a *js.Object field, only the content of the field will be passed to JavaScript and vice versa.
 package js
 
+import (
+	"unsafe"
+	_ "unsafe"
+)
+
 // Object is a container for a native JavaScript object. Calls to its methods are treated specially by GopherJS and translated directly to their JavaScript syntax. A nil pointer to Object is equal to JavaScript's "null". Object can not be used as a map key.
 type Object struct{ object *Object }
 
@@ -264,4 +269,12 @@ func init() {
 	// Avoid dead code elimination.
 	e := Error{}
 	_ = e
+}
+
+func WrapValue(v interface{}) *Object {
+	return InternalObject(v)
+}
+
+func UnwrapValue(v *Object) interface{} {
+	return (interface{})(unsafe.Pointer(v.Unsafe()))
 }

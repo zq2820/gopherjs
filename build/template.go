@@ -9,11 +9,11 @@ import (
 func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 	importPathValue := fmt.Sprintf("\"%s\"", importPath)
 
-	component := ""
-	functionComponent := ""
-	props := ""
+	var component *ast.Ident
+	var functionComponent *ast.Ident
+	var props ast.Expr
 	for _, decl := range file.Decls {
-		if (component != "" || functionComponent != "") && props != "" {
+		if (component != nil || functionComponent != nil) && props != nil {
 			break
 		}
 
@@ -26,17 +26,11 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 							if ident, ok := expr.X.(*ast.Ident); ok {
 								if ident.Name == "react" {
 									if expr.Sel.Name == "ComponentDef" {
-										component = t.Name.Name
-										field.Tag = &ast.BasicLit{Kind: token.STRING, Value: importPathValue}
-										return true
-									}
-									if expr.Sel.Name == "FunctionComponent" {
-										functionComponent = t.Name.Name
-										field.Tag = &ast.BasicLit{Kind: token.STRING, Value: importPathValue}
+										component = t.Name
 										return true
 									}
 									if expr.Sel.Name == "Props" {
-										props = t.Name.Name
+										props = t.Name
 										return true
 									}
 								}
@@ -59,28 +53,50 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 					}
 				}
 			}
+		case *ast.FuncDecl:
+			if c.Type.Results != nil && len(c.Type.Results.List) == 1 {
+				if selectorExpr, ok := c.Type.Results.List[0].Type.(*ast.SelectorExpr); ok {
+					if x, ok := selectorExpr.X.(*ast.Ident); ok {
+						if x.Name == "react" {
+							if selectorExpr.Sel.Name == "Element" {
+								functionComponent = c.Name
+								if propsDef, ok := c.Type.Params.List[0].Type.(*ast.StarExpr); ok {
+									props = propsDef.X
+								} else {
+									props = c.Type.Params.List[0].Type
+								}
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
-	if component != "" || functionComponent != "" {
+	if component != nil || functionComponent != nil {
 		for _, decl := range file.Decls {
 			switch c := decl.(type) {
 			case *ast.GenDecl:
 				if c.Tok == token.IMPORT {
-					hasJs := false
-					hasChunks := false
-					hasCopier := false
+					hasJs := !isWatch || functionComponent == nil
+					hasChunks := !isWatch
+					hasCopier := !isWatch
+					hasReflect := !isWatch || functionComponent == nil
 					for _, spec := range c.Specs {
-						if !isWatch || spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/chunks\"" {
+						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/chunks\"" {
 							hasChunks = true
 						}
 						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/gopherjs/gopherjs/js\"" {
 							hasJs = true
 						}
-						if (!isWatch && component != "") || spec.(*ast.ImportSpec).Path.Value == "\"github.com/jinzhu/copier\"" {
+						if spec.(*ast.ImportSpec).Path.Value == "\"github.com/jinzhu/copier\"" {
 							hasCopier = true
 						}
-						if hasJs && hasChunks && hasCopier {
+						if spec.(*ast.ImportSpec).Path.Value == "\"reflect\"" {
+							hasReflect = true
+						}
+						if hasChunks && hasCopier {
 							break
 						}
 					}
@@ -99,96 +115,101 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 							Path: &ast.BasicLit{Kind: token.STRING, Value: "\"github.com/jinzhu/copier\""},
 						})
 					}
+					if !hasReflect {
+						c.Specs = append(c.Specs, &ast.ImportSpec{
+							Path: &ast.BasicLit{Kind: token.STRING, Value: "\"reflect\""},
+						})
+					}
 				}
 			}
 		}
-		if functionComponent != "" {
-			file.Decls = append(file.Decls, &ast.FuncDecl{
-				Recv: &ast.FieldList{
-					List: []*ast.Field{{
-						Names: []*ast.Ident{{Name: "a"}},
-						Type:  &ast.Ident{Name: functionComponent},
-					},
-					},
-				},
-				Name: &ast.Ident{Name: "HackRender"},
-				Type: &ast.FuncType{
-					Params: &ast.FieldList{
-						List: []*ast.Field{{
-							Names: []*ast.Ident{{Name: "props"}},
-							Type: &ast.StarExpr{
-								X: &ast.SelectorExpr{
-									X:   &ast.Ident{Name: "js"},
-									Sel: &ast.Ident{Name: "Object"},
-								},
-							},
-						}},
-					},
-					Results: &ast.FieldList{
-						List: []*ast.Field{{Type: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "react"},
-							Sel: &ast.Ident{Name: "Element"},
-						}}},
-					},
-				},
-				Body: &ast.BlockStmt{
-					List: []ast.Stmt{&ast.AssignStmt{
-						Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
-						Tok: token.DEFINE,
-						Rhs: []ast.Expr{&ast.UnaryExpr{
-							Op: token.AND,
-							X:  &ast.CompositeLit{Type: &ast.Ident{Name: "FunProps"}},
-						}},
-					}, &ast.ExprStmt{
-						X: &ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "copier"},
-								Sel: &ast.Ident{Name: "Copy"},
-							},
-							Args: []ast.Expr{
-								&ast.Ident{Name: "newProps"},
-								&ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X:   &ast.Ident{Name: "react"},
-										Sel: &ast.Ident{Name: "UnwrapValue"},
-									},
-									Args: []ast.Expr{
-										&ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X:   &ast.Ident{Name: "props"},
-												Sel: &ast.Ident{Name: "Get"},
-											},
-											Args: []ast.Expr{&ast.BasicLit{
-												Kind:  token.STRING,
-												Value: "\"_props\"",
-											}},
-										},
-									},
-								},
-							},
-						},
-					}, &ast.ReturnStmt{
-						Results: []ast.Expr{&ast.CallExpr{
-							Fun: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "a"},
-								Sel: &ast.Ident{Name: "Default"},
-							},
-							Args: []ast.Expr{
-								&ast.Ident{Name: "newProps"},
-							},
-						}},
-					}},
-				},
-			})
-		}
+		// if functionComponent != nil {
+		// 	file.Decls = append(file.Decls, &ast.FuncDecl{
+		// 		Recv: &ast.FieldList{
+		// 			List: []*ast.Field{{
+		// 				Names: []*ast.Ident{{Name: "a"}},
+		// 				Type:  functionComponent,
+		// 			},
+		// 			},
+		// 		},
+		// 		Name: &ast.Ident{Name: "HackRender"},
+		// 		Type: &ast.FuncType{
+		// 			Params: &ast.FieldList{
+		// 				List: []*ast.Field{{
+		// 					Names: []*ast.Ident{{Name: "props"}},
+		// 					Type: &ast.StarExpr{
+		// 						X: &ast.SelectorExpr{
+		// 							X:   &ast.Ident{Name: "js"},
+		// 							Sel: &ast.Ident{Name: "Object"},
+		// 						},
+		// 					},
+		// 				}},
+		// 			},
+		// 			Results: &ast.FieldList{
+		// 				List: []*ast.Field{{Type: &ast.SelectorExpr{
+		// 					X:   &ast.Ident{Name: "react"},
+		// 					Sel: &ast.Ident{Name: "Element"},
+		// 				}}},
+		// 			},
+		// 		},
+		// 		Body: &ast.BlockStmt{
+		// 			List: []ast.Stmt{&ast.AssignStmt{
+		// 				Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
+		// 				Tok: token.DEFINE,
+		// 				Rhs: []ast.Expr{&ast.UnaryExpr{
+		// 					Op: token.AND,
+		// 					X:  &ast.CompositeLit{Type: props},
+		// 				}},
+		// 			}, &ast.ExprStmt{
+		// 				X: &ast.CallExpr{
+		// 					Fun: &ast.SelectorExpr{
+		// 						X:   &ast.Ident{Name: "copier"},
+		// 						Sel: &ast.Ident{Name: "Copy"},
+		// 					},
+		// 					Args: []ast.Expr{
+		// 						&ast.Ident{Name: "newProps"},
+		// 						&ast.CallExpr{
+		// 							Fun: &ast.SelectorExpr{
+		// 								X:   &ast.Ident{Name: "react"},
+		// 								Sel: &ast.Ident{Name: "UnwrapValue"},
+		// 							},
+		// 							Args: []ast.Expr{
+		// 								&ast.CallExpr{
+		// 									Fun: &ast.SelectorExpr{
+		// 										X:   &ast.Ident{Name: "props"},
+		// 										Sel: &ast.Ident{Name: "Get"},
+		// 									},
+		// 									Args: []ast.Expr{&ast.BasicLit{
+		// 										Kind:  token.STRING,
+		// 										Value: "\"_props\"",
+		// 									}},
+		// 								},
+		// 							},
+		// 						},
+		// 					},
+		// 				},
+		// 			}, &ast.ReturnStmt{
+		// 				Results: []ast.Expr{&ast.CallExpr{
+		// 					Fun: &ast.SelectorExpr{
+		// 						X:   &ast.Ident{Name: "a"},
+		// 						Sel: &ast.Ident{Name: "Default"},
+		// 					},
+		// 					Args: []ast.Expr{
+		// 						&ast.Ident{Name: "newProps"},
+		// 					},
+		// 				}},
+		// 			}},
+		// 		},
+		// 	})
+		// }
 
 		if isWatch {
-			if component != "" {
+			if component != nil {
 				getProps := &ast.FuncDecl{
 					Recv: &ast.FieldList{
 						List: []*ast.Field{{
 							Names: []*ast.Ident{{Name: "a"}},
-							Type:  &ast.Ident{Name: component},
+							Type:  component,
 						}},
 					},
 					Name: &ast.Ident{Name: "Props"},
@@ -211,9 +232,7 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 								Rhs: []ast.Expr{&ast.UnaryExpr{
 									Op: token.AND,
 									X: &ast.CompositeLit{
-										Type: &ast.Ident{
-											Name: props,
-										},
+										Type: props,
 									},
 								}},
 							},
@@ -248,77 +267,399 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 				file.Decls = append(file.Decls, getProps)
 			}
 
-			var cmp string
-			if component != "" {
-				cmp = component
+			var cmp ast.Expr
+			if component != nil {
+				cmp = &ast.UnaryExpr{
+					Op: token.AND,
+					X: &ast.CompositeLit{
+						Type: component,
+					},
+				}
 			} else {
-				cmp = functionComponent
-			}
+				cmp = &ast.FuncLit{
+					Type: &ast.FuncType{
+						Params: &ast.FieldList{
+							List: []*ast.Field{{
+								Names: []*ast.Ident{{Name: "props"}},
+								Type: &ast.InterfaceType{
+									Methods: &ast.FieldList{},
+								},
+							}, {
+								Names: []*ast.Ident{{Name: "children"}},
+								Type: &ast.Ellipsis{
+									Ellipsis: 1,
+									Elt: &ast.SelectorExpr{
+										X:   &ast.Ident{Name: "react"},
+										Sel: &ast.Ident{Name: "Element"},
+									},
+								}},
+							},
+						},
+						Results: &ast.FieldList{
+							List: []*ast.Field{{Type: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "react"},
+								Sel: &ast.Ident{Name: "Element"},
+							}}},
+						},
+					},
+					Body: &ast.BlockStmt{
+						List: []ast.Stmt{&ast.AssignStmt{
+							Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
+							Tok: token.DEFINE,
+							Rhs: []ast.Expr{&ast.UnaryExpr{
+								Op: token.AND,
+								X:  &ast.CompositeLit{Type: props},
+							}},
+						}, &ast.ExprStmt{
+							X: &ast.CallExpr{
+								Fun: &ast.SelectorExpr{
+									X:   &ast.Ident{Name: "copier"},
+									Sel: &ast.Ident{Name: "Copy"},
+								},
+								Args: []ast.Expr{
+									&ast.Ident{Name: "newProps"},
+									&ast.Ident{Name: "props"},
+								},
+							},
+						}, &ast.ReturnStmt{
+							Results: []ast.Expr{&ast.CallExpr{
+								Fun: functionComponent,
+								Args: []ast.Expr{
+									&ast.Ident{Name: "newProps"},
+									&ast.Ident{Name: "children"},
+								},
+								Ellipsis: 1,
+							}},
+						}},
+					},
+				}
 
-			module := &ast.GenDecl{
-				Tok: token.VAR,
-				Specs: []ast.Spec{
-					&ast.ValueSpec{
-						Names: []*ast.Ident{{Name: "_"}},
-						Values: []ast.Expr{
-							&ast.CallExpr{
-								Fun: &ast.ParenExpr{
-									X: &ast.FuncLit{
-										Type: &ast.FuncType{
-											Params:  &ast.FieldList{},
-											Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.Ident{Name: "bool"}}}},
-										},
-										Body: &ast.BlockStmt{
-											List: []ast.Stmt{
-												&ast.AssignStmt{
-													Lhs: []ast.Expr{&ast.IndexExpr{
+				cmp = &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X: &ast.SelectorExpr{
+							X:   &ast.Ident{Name: "js"},
+							Sel: &ast.Ident{Name: "Global"},
+						},
+						Sel: &ast.Ident{Name: "Call"},
+					},
+					Args: []ast.Expr{
+						&ast.BasicLit{
+							Kind:  token.STRING,
+							Value: "\"$makeFunc\"",
+						},
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "js"},
+								Sel: &ast.Ident{Name: "InternalObject"},
+							},
+							Args: []ast.Expr{
+								&ast.FuncLit{
+									Type: &ast.FuncType{
+										Params: &ast.FieldList{
+											List: []*ast.Field{
+												{
+													Names: []*ast.Ident{{Name: "this"}},
+													Type: &ast.StarExpr{
 														X: &ast.SelectorExpr{
-															X:   &ast.Ident{Name: "chunks"},
-															Sel: &ast.Ident{Name: "GoChunks"},
+															X:   &ast.Ident{Name: "js"},
+															Sel: &ast.Ident{Name: "Object"},
 														},
-														Index: &ast.BasicLit{
-															Kind:  token.STRING,
-															Value: importPathValue,
+													},
+												},
+												{
+													Names: []*ast.Ident{{Name: "arguments"}},
+													Type: &ast.ArrayType{Elt: &ast.StarExpr{
+														X: &ast.SelectorExpr{
+															X:   &ast.Ident{Name: "js"},
+															Sel: &ast.Ident{Name: "Object"},
 														},
 													}},
-													Tok: token.ASSIGN,
-													Rhs: []ast.Expr{&ast.FuncLit{
-														Type: &ast.FuncType{
-															Params: &ast.FieldList{},
-															Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.InterfaceType{
-																Methods: &ast.FieldList{},
-															}}}},
+												},
+											},
+										},
+										Results: &ast.FieldList{
+											List: []*ast.Field{{Type: &ast.InterfaceType{
+												Methods: &ast.FieldList{},
+											}}},
+										},
+									},
+									Body: &ast.BlockStmt{
+										List: []ast.Stmt{
+											&ast.AssignStmt{
+												Lhs: []ast.Expr{
+													&ast.Ident{Name: "props"},
+												},
+												Tok: token.DEFINE,
+												Rhs: []ast.Expr{
+													&ast.CallExpr{
+														Fun: &ast.SelectorExpr{
+															X:   &ast.Ident{Name: "js"},
+															Sel: &ast.Ident{Name: "UnwrapValue"},
 														},
-														Body: &ast.BlockStmt{
-															List: []ast.Stmt{
-																&ast.ReturnStmt{
-																	Results: []ast.Expr{
-																		&ast.UnaryExpr{
-																			Op: token.AND,
-																			X: &ast.CompositeLit{
-																				Type: &ast.Ident{Name: cmp},
+														Args: []ast.Expr{
+															&ast.CallExpr{
+																Fun: &ast.SelectorExpr{
+																	X: &ast.IndexExpr{
+																		X: &ast.Ident{Name: "arguments"},
+																		Index: &ast.BasicLit{
+																			Kind:  token.INT,
+																			Value: "0",
+																		},
+																	},
+																	Sel: &ast.Ident{Name: "Get"},
+																},
+																Args: []ast.Expr{
+																	&ast.BasicLit{
+																		Kind:  token.STRING,
+																		Value: "\"_props\"",
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+											&ast.AssignStmt{
+												Lhs: []ast.Expr{&ast.Ident{Name: "unwrapChildren"}},
+												Tok: token.DEFINE,
+												Rhs: []ast.Expr{
+													&ast.CallExpr{
+														Fun: &ast.SelectorExpr{
+															X:   &ast.Ident{Name: "reflect"},
+															Sel: &ast.Ident{Name: "ValueOf"},
+														},
+														Args: []ast.Expr{
+															&ast.StarExpr{
+																X: &ast.TypeAssertExpr{
+																	X: &ast.CallExpr{
+																		Fun: &ast.SelectorExpr{
+																			X:   &ast.Ident{Name: "js"},
+																			Sel: &ast.Ident{Name: "UnwrapValue"},
+																		},
+																		Args: []ast.Expr{
+																			&ast.CallExpr{
+																				Fun: &ast.SelectorExpr{
+																					X: &ast.IndexExpr{
+																						X: &ast.Ident{Name: "arguments"},
+																						Index: &ast.BasicLit{
+																							Kind:  token.INT,
+																							Value: "0",
+																						},
+																					},
+																					Sel: &ast.Ident{Name: "Get"},
+																				},
+																				Args: []ast.Expr{
+																					&ast.BasicLit{
+																						Kind:  token.STRING,
+																						Value: "\"_children\"",
+																					},
+																				},
+																			},
+																		},
+																	},
+																	Type: &ast.StarExpr{
+																		X: &ast.ArrayType{
+																			Elt: &ast.SelectorExpr{
+																				X:   &ast.Ident{Name: "react"},
+																				Sel: &ast.Ident{Name: "Element"},
 																			},
 																		},
 																	},
 																},
 															},
 														},
+													},
+												},
+											},
+											&ast.AssignStmt{
+												Lhs: []ast.Expr{&ast.Ident{Name: "unwrapArgs"}},
+												Tok: token.DEFINE,
+												Rhs: []ast.Expr{&ast.CallExpr{
+													Fun: &ast.Ident{Name: "make"},
+													Args: []ast.Expr{
+														&ast.ArrayType{
+															Elt: &ast.SelectorExpr{
+																X:   &ast.Ident{Name: "reflect"},
+																Sel: &ast.Ident{Name: "Value"},
+															},
+														},
+														&ast.BasicLit{
+															Kind:  token.INT,
+															Value: "0",
+														},
+														&ast.BinaryExpr{
+															X: &ast.CallExpr{
+																Fun: &ast.SelectorExpr{
+																	X:   &ast.Ident{Name: "unwrapChildren"},
+																	Sel: &ast.Ident{Name: "Len"},
+																},
+															},
+															Op: token.ADD,
+															Y: &ast.BasicLit{
+																Kind:  token.INT,
+																Value: "1",
+															},
+														},
+													},
+												}},
+											},
+											&ast.AssignStmt{
+												Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
+												Tok: token.DEFINE,
+												Rhs: []ast.Expr{&ast.UnaryExpr{
+													Op: token.AND,
+													X:  &ast.CompositeLit{Type: props},
+												}},
+											},
+											&ast.ExprStmt{
+												X: &ast.CallExpr{
+													Fun: &ast.SelectorExpr{
+														X:   &ast.Ident{Name: "copier"},
+														Sel: &ast.Ident{Name: "Copy"},
+													},
+													Args: []ast.Expr{
+														&ast.Ident{Name: "newProps"},
+														&ast.Ident{Name: "props"},
+													},
+												},
+											},
+											&ast.AssignStmt{
+												Lhs: []ast.Expr{&ast.Ident{Name: "unwrapArgs"}},
+												Tok: token.ASSIGN,
+												Rhs: []ast.Expr{&ast.CallExpr{
+													Fun: &ast.Ident{Name: "append"},
+													Args: []ast.Expr{
+														&ast.Ident{Name: "unwrapArgs"},
+														&ast.CallExpr{
+															Fun: &ast.SelectorExpr{
+																X:   &ast.Ident{Name: "reflect"},
+																Sel: &ast.Ident{Name: "ValueOf"},
+															},
+															Args: []ast.Expr{
+																&ast.Ident{Name: "newProps"},
+															},
+														},
+													},
+												}},
+											},
+											&ast.ForStmt{
+												Init: &ast.AssignStmt{
+													Lhs: []ast.Expr{&ast.Ident{Name: "i"}},
+													Tok: token.DEFINE,
+													Rhs: []ast.Expr{&ast.BasicLit{
+														Kind:  token.INT,
+														Value: "0",
 													}},
 												},
-												&ast.ReturnStmt{
-													Results: []ast.Expr{&ast.Ident{Name: "true"}},
+												Cond: &ast.BinaryExpr{
+													X:  &ast.Ident{Name: "i"},
+													Op: token.LSS,
+													Y: &ast.CallExpr{
+														Fun: &ast.SelectorExpr{
+															X:   &ast.Ident{Name: "unwrapChildren"},
+															Sel: &ast.Ident{Name: "Len"},
+														},
+													},
+												},
+												Post: &ast.IncDecStmt{
+													X:   &ast.Ident{Name: "i"},
+													Tok: token.INC,
+												},
+												Body: &ast.BlockStmt{
+													List: []ast.Stmt{
+														&ast.AssignStmt{
+															Lhs: []ast.Expr{&ast.Ident{Name: "unwrapArgs"}},
+															Tok: token.ASSIGN,
+															Rhs: []ast.Expr{&ast.CallExpr{
+																Fun: &ast.Ident{Name: "append"},
+																Args: []ast.Expr{
+																	&ast.Ident{Name: "unwrapArgs"},
+																	&ast.CallExpr{
+																		Fun: &ast.SelectorExpr{
+																			X:   &ast.Ident{Name: "unwrapChildren"},
+																			Sel: &ast.Ident{Name: "Index"},
+																		},
+																		Args: []ast.Expr{
+																			&ast.Ident{Name: "i"},
+																		},
+																	},
+																},
+															}},
+														},
+													},
+												},
+											},
+											&ast.ReturnStmt{
+												Results: []ast.Expr{
+													&ast.CallExpr{
+														Fun: &ast.SelectorExpr{
+															X: &ast.IndexExpr{
+																X: &ast.CallExpr{
+																	Fun: &ast.SelectorExpr{
+																		X: &ast.CallExpr{
+																			Fun: &ast.SelectorExpr{
+																				X:   &ast.Ident{Name: "reflect"},
+																				Sel: &ast.Ident{Name: "ValueOf"},
+																			},
+																			Args: []ast.Expr{functionComponent},
+																		},
+																		Sel: &ast.Ident{Name: "Call"},
+																	},
+																	Args: []ast.Expr{&ast.Ident{Name: "unwrapArgs"}},
+																},
+																Index: &ast.BasicLit{
+																	Kind:  token.INT,
+																	Value: "0",
+																},
+															},
+															Sel: &ast.Ident{Name: "Interface"},
+														},
+													},
 												},
 											},
 										},
 									},
 								},
-								Args: []ast.Expr{},
 							},
+						},
+						&ast.BasicLit{
+							Kind:  token.STRING,
+							Value: fmt.Sprintf("\"%s\"", functionComponent.Name),
+						},
+					},
+				}
+			}
+
+			init := &ast.FuncDecl{
+				Name: &ast.Ident{
+					Name: "init",
+				},
+				Type: &ast.FuncType{
+					Params: &ast.FieldList{},
+				},
+				Body: &ast.BlockStmt{
+					List: []ast.Stmt{
+						&ast.AssignStmt{
+							Lhs: []ast.Expr{&ast.IndexExpr{
+								X: &ast.SelectorExpr{
+									X:   &ast.Ident{Name: "chunks"},
+									Sel: &ast.Ident{Name: "GoChunks"},
+								},
+								Index: &ast.BasicLit{
+									Kind:  token.STRING,
+									Value: importPathValue,
+								},
+							}},
+							Tok: token.ASSIGN,
+							Rhs: []ast.Expr{cmp},
 						},
 					},
 				},
 			}
-			file.Decls = append(file.Decls, module)
+
+			_ = importPathValue
+			_ = cmp
+			file.Decls = append(file.Decls, init)
 		}
 	}
 }

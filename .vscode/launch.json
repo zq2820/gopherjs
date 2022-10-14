@@ -10,7 +10,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "./tool.go",
-      "args": ["build", "./helloworld", "-o", "./helloworld/dist"]
+      "args": ["build", "./helloworld", "-w", "-a"]
     }
   ]
 }
