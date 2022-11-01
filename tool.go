@@ -125,7 +125,7 @@ func main() {
 
 			err = func() error {
 				// Handle "gopherjs build [files]" ad-hoc package mode.
-				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".inc.js")) {
+				if len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".gox") || strings.HasSuffix(args[0], ".inc.js")) {
 					for _, arg := range args {
 						if !strings.HasSuffix(arg, ".go") && !strings.HasSuffix(arg, ".inc.js") {
 							return fmt.Errorf("named files must be .go or .inc.js files")
@@ -171,28 +171,15 @@ func main() {
 						fmt.Println(err)
 						return err
 					}
-					if quick, slow := gbuild.GenerateNodeModules(path.Join(args[0]), options.Watch); true {
-						for _, jsFile := range quick {
-							code, err := ioutil.ReadFile(jsFile)
-							if err != nil {
-								return err
-							}
-							archive.IncJSCode = append(archive.IncJSCode, []byte("\t(function() {\n")...)
-							archive.IncJSCode = append(archive.IncJSCode, code...)
-							archive.IncJSCode = append(archive.IncJSCode, []byte("\n\t}).call($global);\n")...)
-						}
+					if nodeModules, reload := gbuild.GenerateNodeModules(path.Join(args[0]), options.Watch); true {
 						if s.WatchReady() {
-							packetType := gbuild.Js
-							content := archive.IncJSCode
-							// if len(quick) > 1 {
-							// packetType = gbuild.Reload
-							// content = []byte{}
-							// }
 							if devServer, ok := io.(*gbuild.DevServer); ok {
-								devServer.Stash(packetType, "", content)
+								if reload {
+									devServer.Stash(gbuild.Reload, "", nil)
+								}
 							}
 						}
-						for _, jsFile := range slow {
+						for _, jsFile := range nodeModules {
 							code, err := ioutil.ReadFile(jsFile)
 							if err != nil {
 								return err
@@ -330,7 +317,7 @@ func main() {
 		options.BuildTags = strings.Fields(tags)
 		lastSourceArg := 0
 		for {
-			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
+			if lastSourceArg == len(args) || !(strings.HasSuffix(args[lastSourceArg], ".go") || strings.HasSuffix(args[lastSourceArg], ".gox") || strings.HasSuffix(args[lastSourceArg], ".inc.js")) {
 				break
 			}
 			lastSourceArg++
@@ -611,7 +598,7 @@ func main() {
 			return err
 		}
 		if tcpAddr := ln.Addr().(*net.TCPAddr); tcpAddr.IP.Equal(net.IPv4zero) || tcpAddr.IP.Equal(net.IPv6zero) { // Any available addresses.
-			fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
+				fmt.Printf("serving at http://localhost:%d and on port %d of any available addresses\n", tcpAddr.Port, tcpAddr.Port)
 		} else { // Specific address.
 			fmt.Printf("serving at http://%s\n", tcpAddr)
 		}

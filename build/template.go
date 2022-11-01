@@ -22,29 +22,14 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 			if t, ok := c.Specs[0].(*ast.TypeSpec); ok {
 				if fieldList, ok := t.Type.(*ast.StructType); ok {
 					for _, field := range fieldList.Fields.List {
-						searchComponent := func(expr *ast.SelectorExpr) bool {
-							if ident, ok := expr.X.(*ast.Ident); ok {
-								if ident.Name == "react" {
-									if expr.Sel.Name == "ComponentDef" {
-										component = t.Name
-										return true
-									}
-									if expr.Sel.Name == "Props" {
-										props = t.Name
-										return true
-									}
-								}
-							}
-							return false
-						}
-						if selectorExpr, ok := field.Type.(*ast.SelectorExpr); ok {
-							if searchComponent(selectorExpr) {
-								break
-							}
-						} else {
-							if indexExpr, ok := field.Type.(*ast.IndexExpr); ok {
-								if selectorExpr, ok := indexExpr.X.(*ast.SelectorExpr); ok {
-									if searchComponent(selectorExpr) {
+						if typeParams, ok := field.Type.(*ast.IndexExpr); ok {
+							if selectorExpr, ok := typeParams.X.(*ast.SelectorExpr); ok {
+								if ident, ok := selectorExpr.X.(*ast.Ident); ok {
+									if ident.Name == "react" {
+										if selectorExpr.Sel.Name == "ComponentDef" {
+											component = t.Name
+										}
+										props = typeParams.Index
 										break
 									}
 								}
@@ -54,7 +39,7 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 				}
 			}
 		case *ast.FuncDecl:
-			if c.Type.Results != nil && len(c.Type.Results.List) == 1 {
+			if c.Type.Results != nil && c.Recv == nil && len(c.Type.Results.List) == 1 {
 				if selectorExpr, ok := c.Type.Results.List[0].Type.(*ast.SelectorExpr); ok {
 					if x, ok := selectorExpr.X.(*ast.Ident); ok {
 						if x.Name == "react" {
@@ -75,6 +60,10 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 	}
 
 	if component != nil || functionComponent != nil {
+		if props == nil {
+			panic("Props is need in gox")
+		}
+
 		for _, decl := range file.Decls {
 			switch c := decl.(type) {
 			case *ast.GenDecl:
@@ -123,85 +112,6 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 				}
 			}
 		}
-		// if functionComponent != nil {
-		// 	file.Decls = append(file.Decls, &ast.FuncDecl{
-		// 		Recv: &ast.FieldList{
-		// 			List: []*ast.Field{{
-		// 				Names: []*ast.Ident{{Name: "a"}},
-		// 				Type:  functionComponent,
-		// 			},
-		// 			},
-		// 		},
-		// 		Name: &ast.Ident{Name: "HackRender"},
-		// 		Type: &ast.FuncType{
-		// 			Params: &ast.FieldList{
-		// 				List: []*ast.Field{{
-		// 					Names: []*ast.Ident{{Name: "props"}},
-		// 					Type: &ast.StarExpr{
-		// 						X: &ast.SelectorExpr{
-		// 							X:   &ast.Ident{Name: "js"},
-		// 							Sel: &ast.Ident{Name: "Object"},
-		// 						},
-		// 					},
-		// 				}},
-		// 			},
-		// 			Results: &ast.FieldList{
-		// 				List: []*ast.Field{{Type: &ast.SelectorExpr{
-		// 					X:   &ast.Ident{Name: "react"},
-		// 					Sel: &ast.Ident{Name: "Element"},
-		// 				}}},
-		// 			},
-		// 		},
-		// 		Body: &ast.BlockStmt{
-		// 			List: []ast.Stmt{&ast.AssignStmt{
-		// 				Lhs: []ast.Expr{&ast.Ident{Name: "newProps"}},
-		// 				Tok: token.DEFINE,
-		// 				Rhs: []ast.Expr{&ast.UnaryExpr{
-		// 					Op: token.AND,
-		// 					X:  &ast.CompositeLit{Type: props},
-		// 				}},
-		// 			}, &ast.ExprStmt{
-		// 				X: &ast.CallExpr{
-		// 					Fun: &ast.SelectorExpr{
-		// 						X:   &ast.Ident{Name: "copier"},
-		// 						Sel: &ast.Ident{Name: "Copy"},
-		// 					},
-		// 					Args: []ast.Expr{
-		// 						&ast.Ident{Name: "newProps"},
-		// 						&ast.CallExpr{
-		// 							Fun: &ast.SelectorExpr{
-		// 								X:   &ast.Ident{Name: "react"},
-		// 								Sel: &ast.Ident{Name: "UnwrapValue"},
-		// 							},
-		// 							Args: []ast.Expr{
-		// 								&ast.CallExpr{
-		// 									Fun: &ast.SelectorExpr{
-		// 										X:   &ast.Ident{Name: "props"},
-		// 										Sel: &ast.Ident{Name: "Get"},
-		// 									},
-		// 									Args: []ast.Expr{&ast.BasicLit{
-		// 										Kind:  token.STRING,
-		// 										Value: "\"_props\"",
-		// 									}},
-		// 								},
-		// 							},
-		// 						},
-		// 					},
-		// 				},
-		// 			}, &ast.ReturnStmt{
-		// 				Results: []ast.Expr{&ast.CallExpr{
-		// 					Fun: &ast.SelectorExpr{
-		// 						X:   &ast.Ident{Name: "a"},
-		// 						Sel: &ast.Ident{Name: "Default"},
-		// 					},
-		// 					Args: []ast.Expr{
-		// 						&ast.Ident{Name: "newProps"},
-		// 					},
-		// 				}},
-		// 			}},
-		// 		},
-		// 	})
-		// }
 
 		if isWatch {
 			if component != nil {
@@ -218,9 +128,8 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 							List: []*ast.Field{},
 						},
 						Results: &ast.FieldList{
-							List: []*ast.Field{{Type: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "react"},
-								Sel: &ast.Ident{Name: "Props"},
+							List: []*ast.Field{{Type: &ast.StarExpr{
+								X: props,
 							}}},
 						},
 					},

@@ -69,6 +69,11 @@ func FuncKey(d *ast.FuncDecl) string {
 	if star, ok := recv.(*ast.StarExpr); ok {
 		recv = star.X
 	}
+
+	if indexExpr, ok := recv.(*ast.IndexExpr); ok {
+		return indexExpr.X.(*ast.Ident).Name + "." + d.Name.Name
+	}
+
 	return recv.(*ast.Ident).Name + "." + d.Name.Name
 }
 

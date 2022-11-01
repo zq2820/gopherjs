@@ -93,6 +93,10 @@ func (info *Info) newFuncInfo(n ast.Node) *FuncInfo {
 }
 
 func (info *Info) IsBlocking(fun *types.Func) bool {
+	if info.FuncDeclInfos[fun] == nil {
+		return true
+	}
+
 	return len(info.FuncDeclInfos[fun].Blocking) > 0
 }
 

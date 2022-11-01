@@ -265,16 +265,16 @@ type M map[string]interface{}
 // S is a simple slice type. It is intended as a shorthand for JavaScript arrays (before conversion).
 type S []interface{}
 
-func init() {
-	// Avoid dead code elimination.
-	e := Error{}
-	_ = e
-}
-
 func WrapValue(v interface{}) *Object {
 	return InternalObject(v)
 }
 
 func UnwrapValue(v *Object) interface{} {
 	return (interface{})(unsafe.Pointer(v.Unsafe()))
+}
+
+func init() {
+	// Avoid dead code elimination.
+	e := Error{}
+	_ = e
 }

@@ -17,6 +17,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+	golang.org/x/text v0.3.7
 	golang.org/x/tools v0.1.11
 	honnef.co/go/js/console v0.0.0-20150119023344-105276c43558
 	honnef.co/go/js/dom v0.0.0-20210725211120-f030747120f2
@@ -43,6 +44,6 @@ require (
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 )
 
-replace github.com/gopherjs/gopherjs v1.17.2 => ./
-
 replace myitcv.io v0.0.0-20201125173645-a7167afc9e13 => github.com/zq2820/x v0.0.0-20220804020614-b6dce56e99ee
+
+replace golang.org/x/tools v0.1.11 => github.com/zq2820/tools v0.0.0-20221031053834-9ae393c829d6

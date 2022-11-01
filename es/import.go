@@ -3,6 +3,7 @@ package es
 import (
 	"regexp"
 
+	"github.com/gopherjs/gopherjs/chunks"
 	"github.com/gopherjs/gopherjs/js"
 	"github.com/speps/go-hashids"
 )
@@ -43,7 +44,7 @@ func Import(path string) func(...string) string {
 type ImportMethod int
 
 const (
-	DEFAULT ImportMethod = iota + 1
+	DEFAULT ImportMethod = iota
 	NOT_DEFAULT
 )
 
@@ -58,5 +59,17 @@ func ImportNodeModule(lib string, importName string, options ...ImportOptions) *
 	if options[0].AsName != "" {
 		name = options[0].AsName
 	}
-	return js.Global.Get(lib).Get(options[0].Container).Get(name)
+
+	if chunks.IsWatch {
+		if options[0].Method == DEFAULT {
+			if js.Global.Get(lib).Get("default") != js.Undefined {
+				return js.Global.Get(lib).Get("default")
+			}
+			return js.Global.Get(lib)
+		} else {
+			return js.Global.Get(lib).Get(name)
+		}
+	} else {
+		return js.Global.Get(lib).Get(options[0].Container).Get(name)
+	}
 }

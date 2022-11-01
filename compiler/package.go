@@ -183,7 +183,29 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 			previousErr = err
 		},
 	}
+
 	typesPkg, err := config.Check(importPath, fileSet, files, typesInfo)
+
+	hasJsx := false
+	for _, file := range files {
+		if file.IsJsx {
+			hasJsx = true
+		}
+	}
+
+	if hasJsx {
+		errList = append(errList, newAnalysisJsx(typesInfo, files, fileSet).run()...)
+		typesInfo = &types.Info{
+			Types:      make(map[ast.Expr]types.TypeAndValue),
+			Defs:       make(map[*ast.Ident]types.Object),
+			Uses:       make(map[*ast.Ident]types.Object),
+			Implicits:  make(map[ast.Node]types.Object),
+			Selections: make(map[*ast.SelectorExpr]*types.Selection),
+			Scopes:     make(map[ast.Node]*types.Scope),
+		}
+		typesPkg, err = config.Check(importPath, fileSet, files, typesInfo)
+	}
+
 	if importError != nil {
 		return nil, importError
 	}
@@ -221,7 +243,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		if err != nil {
 			panic(err)
 		}
-		fullName := f.FullName()
+		fullName := f.FullName(true)
 		for _, d := range archive.Declarations {
 			if string(d.FullName) == fullName {
 				return d.Blocking
@@ -400,7 +422,7 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 		o := funcCtx.pkgCtx.Defs[fun.Name].(*types.Func)
 		funcInfo := funcCtx.pkgCtx.FuncDeclInfos[o]
 		d := Decl{
-			FullName: o.FullName(),
+			FullName: o.FullName(true),
 			Blocking: len(funcInfo.Blocking) != 0,
 		}
 		if fun.Recv == nil {
@@ -669,7 +691,7 @@ func (fc *funcContext) translateToplevelFunction(fun *ast.FuncDecl, info *analys
 	var joinedParams string
 	primaryFunction := func(funcRef string) []byte {
 		if fun.Body == nil {
-			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", funcRef, o.FullName()))
+			return []byte(fmt.Sprintf("\t%s = function() {\n\t\t$throwRuntimeError(\"native function not implemented: %s\");\n\t};\n", funcRef, o.FullName(true)))
 		}
 
 		params, fun := translateFunction(fun.Type, recv, fun.Body, fc, sig, info, funcRef)

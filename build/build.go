@@ -588,14 +588,14 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		if impModTime.After(pkg.SrcModTime) {
 			var isRoot bool
 			for _, file := range importedPkg.GoFiles {
-				if TestExpr(`\.x\.go$`, file) {
+				if TestExpr(`\.gox$`, file) {
 					isRoot = true
 					break
 				}
 			}
 			if !isRoot {
 				for _, file := range pkg.GoFiles {
-					if TestExpr(`\.x\.go$`, file) {
+					if TestExpr(`\.gox$`, file) {
 						isRoot = true
 						break
 					}
@@ -637,6 +637,29 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 	}
 
 	dir, _ := os.Getwd()
+
+	if !s.options.Watch && (pkg.Package.ImportPath == "myitcv.io/react" || pkg.Package.ImportPath == "github.com/gopherjs/gopherjs/es") {
+		for _, file := range files {
+			astutils.Apply(file, func(c *astutils.Cursor) bool {
+				switch x := c.Node().(type) {
+				case *ast.IfStmt:
+					if selectorExpr, ok := x.Cond.(*ast.SelectorExpr); ok {
+						if selectorExpr.String() == "chunks.IsWatch" {
+							c.Delete()
+							return false
+						}
+					}
+				case *ast.ImportSpec:
+					if x.Path.Value == "\"github.com/gopherjs/gopherjs/chunks\"" {
+						c.Delete()
+						return false
+					}
+				}
+				return true
+			}, nil)
+		}
+	}
+
 	if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
 		s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
 		container := path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), pkg.Name)[1:]
@@ -712,7 +735,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 				}
 				return true
 			}, nil)
-			if TestExpr(`\.x\.go$`, pkg.GoFiles[i]) {
+			if TestExpr(`\.gox$`, pkg.GoFiles[i]) {
 				GenerateTemplate(file, pkg.ImportPath, s.options.Watch)
 			}
 		}
@@ -924,7 +947,7 @@ func (s *Session) WaitForChange() {
 			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 || filepath.Base(ev.Name)[0] == '.' {
 				continue
 			}
-			if !strings.HasSuffix(ev.Name, ".go") && !isCssRes && !strings.HasSuffix(ev.Name, ".inc.js") {
+			if !strings.HasSuffix(ev.Name, ".go") && !strings.HasSuffix(ev.Name, ".gox") && !isCssRes && !strings.HasSuffix(ev.Name, ".inc.js") {
 				continue
 			}
 			s.options.PrintSuccess("change detected: %s\n", ev.Name)
