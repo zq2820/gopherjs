@@ -69,7 +69,6 @@ func ImportNodeModule(lib string, importName string, options ...ImportOptions) *
 		} else {
 			return js.Global.Get(lib).Get(name)
 		}
-	} else {
-		return js.Global.Get(lib).Get(options[0].Container).Get(name)
 	}
+	return js.Global.Get(lib).Get(options[0].Container).Get(name)
 }
