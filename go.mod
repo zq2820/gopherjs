@@ -26,6 +26,7 @@ require (
 
 require (
 	github.com/gopherjs/jsbuiltin v0.0.0-20180426082241-50091555e127 // indirect
+	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/tdewolff/parse/v2 v2.6.0 // indirect
 )
 
