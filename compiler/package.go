@@ -673,7 +673,11 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 		return fmt.Sprintf(`"%s", [%s]`, pkgPath, strings.Join(fields, ", "))
 	case *types.TypeParam:
 		// 处理泛型
-		return fmt.Sprintf("%s.methods", t.Constraint().(*types.Named).Obj().Name())
+		if named, ok := t.Constraint().(*types.Named); ok {
+			return fmt.Sprintf("%s", named.Obj().Name())
+		} else {
+			return "[]"
+		}
 	default:
 		err := bailout(fmt.Errorf("%v has unexpected type %T", ty, ty))
 		panic(err)

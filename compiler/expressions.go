@@ -770,6 +770,9 @@ func (fc *funcContext) translateExpr(expr ast.Expr) *expression {
 			panic(fmt.Sprintf("Unhandled object: %T\n", o))
 		}
 
+	case *ast.IndexListExpr:
+		expr := fc.formatExpr("%e", e.X)
+		return expr
 	case nil:
 		return fc.formatExpr("")
 

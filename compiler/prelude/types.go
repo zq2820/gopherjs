@@ -585,6 +585,8 @@ var $funcType = function(params, results, variadic, pkg) {
 
 var $interfaceTypes = {};
 var $interfaceType = function(methods) {
+  if (!Array.isArray(methods)) return methods
+
   var typeKey = $mapArray(methods, function(m) { return m.pkg + "," + m.name + "," + m.typ.id; }).join("$");
   var typ = $interfaceTypes[typeKey];
   if (typ === undefined) {
@@ -734,9 +736,43 @@ var $assertType = function(value, type, returnTuple) {
         var found = false;
         for (var j = 0; j < valueMethodSet.length; j++) {
           var vm = valueMethodSet[j];
-          if (vm.name === tm.name && vm.pkg === tm.pkg && vm.typ === tm.typ) {
-            found = true;
-            break;
+          if (vm.name === tm.name && vm.pkg === tm.pkg) {
+            if (vm.typ === tm.typ) {
+              found = true;
+              break;
+            }
+            var vparams = vm.typ.params;
+            var tparams = tm.typ.params;
+            var equal = true;
+            for (var k = 0; k < tparams.length; k++) {
+              let tequal = false
+              if (vparams[k] === tparams[k]) {
+                continue
+              }
+              var fields = vparams[k].fields
+              if (vparams[k].kind === 22) {
+                fields = vparams[k].elem.fields
+              }
+
+              if (fields) {
+                for (var l = 0; l < fields.length; l ++) {
+                  if (fields[l].typ === tparams[k]) {
+                    tequal = true
+                    break
+                  }
+                }
+              } else {
+                tequal = false
+              }
+              if (!tequal) {
+                equal = false
+                break
+              }
+            }
+            if (equal) {
+              found = true;
+              break;
+            }
           }
         }
         if (!found) {

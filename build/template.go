@@ -22,14 +22,14 @@ func GenerateTemplate(file *ast.File, importPath string, isWatch bool) {
 			if t, ok := c.Specs[0].(*ast.TypeSpec); ok {
 				if fieldList, ok := t.Type.(*ast.StructType); ok {
 					for _, field := range fieldList.Fields.List {
-						if typeParams, ok := field.Type.(*ast.IndexExpr); ok {
+						if typeParams, ok := field.Type.(*ast.IndexListExpr); ok {
 							if selectorExpr, ok := typeParams.X.(*ast.SelectorExpr); ok {
 								if ident, ok := selectorExpr.X.(*ast.Ident); ok {
 									if ident.Name == "react" {
 										if selectorExpr.Sel.Name == "ComponentDef" {
 											component = t.Name
 										}
-										props = typeParams.Index
+										props = typeParams.Indices[0]
 										break
 									}
 								}

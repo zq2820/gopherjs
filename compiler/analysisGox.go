@@ -82,7 +82,7 @@ func (analysis *analysisJsx) analysisExpr(cursor *astutil.Cursor) *types.Error {
 								)
 								return &error
 							}
-							childType := getJsxType(tuple.At(0).Type().Underlying())
+							childType := getJsxType(tuple.At(0).Type())
 							replaceGox(cursor, callExpr, childType)
 						} else {
 							return nil
