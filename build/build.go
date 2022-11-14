@@ -938,7 +938,7 @@ func (s *Session) WaitForChange() {
 				if s.scssCompiler.cssChunks[relativePath] != nil {
 					if s.scssCompiler.depended[relativePath] != nil {
 						s.scssCompiler.Add(relativePath, "")
-						s.scssCompiler.BuildScss()
+						defer s.scssCompiler.BuildScss()
 					}
 				} else {
 					continue
