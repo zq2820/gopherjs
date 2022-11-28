@@ -24,11 +24,7 @@ require (
 	myitcv.io v0.0.0-20201125173645-a7167afc9e13
 )
 
-require (
-	github.com/gopherjs/jsbuiltin v0.0.0-20180426082241-50091555e127 // indirect
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
-	github.com/tdewolff/parse/v2 v2.6.0 // indirect
-)
+require github.com/tdewolff/parse/v2 v2.6.0 // indirect
 
 require (
 	github.com/gorilla/css v1.0.0
@@ -45,6 +41,6 @@ require (
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 )
 
-replace myitcv.io v0.0.0-20201125173645-a7167afc9e13 => github.com/zq2820/x v0.0.0-20220804020614-b6dce56e99ee
+replace myitcv.io v0.0.0-20201125173645-a7167afc9e13 => github.com/zq2820/x v0.0.0-20221107014817-0cfc223086b3
 
 replace golang.org/x/tools v0.1.11 => github.com/zq2820/tools v0.0.0-20221031053834-9ae393c829d6

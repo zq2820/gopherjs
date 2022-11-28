@@ -726,7 +726,7 @@ var $assertType = function(value, type, returnTuple) {
     ok = value.constructor === type;
   } else {
     var valueTypeString = value.constructor.string;
-    ok = type.implementedBy[valueTypeString];
+    ok = type.implementedBy[value];
     if (ok === undefined) {
       ok = true;
       var valueMethodSet = $methodSet(value.constructor);
