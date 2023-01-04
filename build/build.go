@@ -675,7 +675,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 							if selectorExpr.Sel.Name == "Import" {
 								oldVal := expr.Args[0].(*ast.BasicLit).Value
 								if isCss(oldVal[1 : len(oldVal)-1]) {
-									val := path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])
+									val := fmt.Sprintf(".%s", path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])[len(pkg.Root):])
 									expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
 									s.scssCompiler.Add(val, pkg.Package.Dir+"/"+pkg.Package.Name)
 									break
@@ -684,7 +684,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 								for suffix := range contentType {
 									if TestExpr(fmt.Sprintf(`\.%s"$`, suffix), expr.Args[0].(*ast.BasicLit).Value) {
 										oldVal := expr.Args[0].(*ast.BasicLit).Value
-										val := path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])[1:]
+										val := fmt.Sprintf(".%s", path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])[len(pkg.Root):])
 										expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
 										image, _ := os.ReadFile(val)
 										if s.options.Watch {

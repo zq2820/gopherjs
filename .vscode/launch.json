@@ -10,8 +10,8 @@
       "request": "launch",
       "mode": "auto",
       "program": "./tool.go",
-      "cwd": "./helloworld",
-      "args": ["build", ".", "-w"]
+      "cwd": "../helloworld",
+      "args": ["build", ".", "-o", "dist", "-m"]
     }
   ]
 }
