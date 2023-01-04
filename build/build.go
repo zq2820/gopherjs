@@ -636,7 +636,7 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		return nil, err
 	}
 
-	dir, _ := os.Getwd()
+	// dir, _ := os.Getwd()
 
 	if !s.options.Watch && (pkg.Package.ImportPath == "myitcv.io/react" || pkg.Package.ImportPath == "github.com/gopherjs/gopherjs/es") {
 		for _, file := range files {
@@ -660,86 +660,86 @@ func (s *Session) BuildPackage(pkg *PackageData) (*compiler.Archive, error) {
 		}
 	}
 
-	if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
-		s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
-		container := path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), pkg.Name)[1:]
-		InitNodeModuleMap(container)
-		for i, file := range files {
-			astutils.Apply(file, func(c *astutils.Cursor) bool {
-				switch expr := c.Node().(type) {
-				case *ast.CallExpr:
-					switch selectorExpr := expr.Fun.(type) {
-					case *ast.SelectorExpr:
-						if x, ok := selectorExpr.X.(*ast.Ident); ok {
-							if x.Name == "es" {
-								if selectorExpr.Sel.Name == "Import" {
-									oldVal := expr.Args[0].(*ast.BasicLit).Value
-									if isCss(oldVal[1 : len(oldVal)-1]) {
-										val := "." + path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1])
-										expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-										s.scssCompiler.Add(val, pkg.Package.Dir+"/"+pkg.Package.Name)
-										break
-									}
+	// if TestExpr("^"+path.Join(dir, os.Args[2]), pkg.Package.Dir) {
+	s.scssCompiler.BeforeCompile(pkg.Package.Dir + "/" + pkg.Package.Name)
+	container := path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), pkg.Name)[1:]
+	InitNodeModuleMap(container)
+	for i, file := range files {
+		astutils.Apply(file, func(c *astutils.Cursor) bool {
+			switch expr := c.Node().(type) {
+			case *ast.CallExpr:
+				switch selectorExpr := expr.Fun.(type) {
+				case *ast.SelectorExpr:
+					if x, ok := selectorExpr.X.(*ast.Ident); ok {
+						if x.Name == "es" {
+							if selectorExpr.Sel.Name == "Import" {
+								oldVal := expr.Args[0].(*ast.BasicLit).Value
+								if isCss(oldVal[1 : len(oldVal)-1]) {
+									val := path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])
+									expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
+									s.scssCompiler.Add(val, pkg.Package.Dir+"/"+pkg.Package.Name)
+									break
+								}
 
-									for suffix := range contentType {
-										if TestExpr(fmt.Sprintf(`\.%s"$`, suffix), expr.Args[0].(*ast.BasicLit).Value) {
-											oldVal := expr.Args[0].(*ast.BasicLit).Value
-											val := (path.Join(strings.Replace(pkg.Package.Dir, pkg.Package.Root, "", 1), oldVal[1:len(oldVal)-1]))[1:]
+								for suffix := range contentType {
+									if TestExpr(fmt.Sprintf(`\.%s"$`, suffix), expr.Args[0].(*ast.BasicLit).Value) {
+										oldVal := expr.Args[0].(*ast.BasicLit).Value
+										val := path.Join(pkg.Package.Dir, oldVal[1:len(oldVal)-1])[1:]
+										expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
+										image, _ := os.ReadFile(val)
+										if s.options.Watch {
 											expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-											image, _ := os.ReadFile(val)
-											if s.options.Watch {
-												expr.Args[0].(*ast.BasicLit).Value = "\"" + val + "\""
-												s.io.Write(val, image)
-											} else {
-												hash := md5.New()
-												filename := fmt.Sprintf("%x.%s", hash.Sum([]byte{}), suffix)
-												expr.Args[0].(*ast.BasicLit).Value = "\"" + filename + "\""
-												s.io.Write(filename, image)
-											}
-											break
+											s.io.Write(val, image)
+										} else {
+											hash := md5.New()
+											filename := fmt.Sprintf("%x.%s", hash.Sum([]byte{}), suffix)
+											expr.Args[0].(*ast.BasicLit).Value = "\"" + filename + "\""
+											s.io.Write(filename, image)
 										}
+										break
 									}
 								}
 							}
-							if selectorExpr.Sel.Name == "ImportNodeModule" {
-								HandleNodeModules(expr.Args, container)
-								if len(expr.Args) < 3 {
-									expr.Args = append(expr.Args,
-										&ast.CompositeLit{
-											Type: &ast.SelectorExpr{
-												X:   ast.NewIdent("es"),
-												Sel: ast.NewIdent("ImportOptions"),
-											},
-											Elts: []ast.Expr{&ast.KeyValueExpr{
-												Key: &ast.Ident{Name: "Container"},
-												Value: &ast.BasicLit{
-													Kind:  token.STRING,
-													Value: fmt.Sprintf(`"%s"`, container),
-												},
-											}},
-										})
-								} else {
-									elts := expr.Args[2].(*ast.CompositeLit).Elts
-									elts = append(elts, &ast.KeyValueExpr{
-										Key: &ast.Ident{Name: "Container"},
-										Value: &ast.BasicLit{
-											Kind:  token.STRING,
-											Value: fmt.Sprintf(`"%s"`, container),
+						}
+						if selectorExpr.Sel.Name == "ImportNodeModule" {
+							HandleNodeModules(expr.Args, container)
+							if len(expr.Args) < 3 {
+								expr.Args = append(expr.Args,
+									&ast.CompositeLit{
+										Type: &ast.SelectorExpr{
+											X:   ast.NewIdent("es"),
+											Sel: ast.NewIdent("ImportOptions"),
 										},
+										Elts: []ast.Expr{&ast.KeyValueExpr{
+											Key: &ast.Ident{Name: "Container"},
+											Value: &ast.BasicLit{
+												Kind:  token.STRING,
+												Value: fmt.Sprintf(`"%s"`, container),
+											},
+										}},
 									})
-									expr.Args[2].(*ast.CompositeLit).Elts = elts
-								}
+							} else {
+								elts := expr.Args[2].(*ast.CompositeLit).Elts
+								elts = append(elts, &ast.KeyValueExpr{
+									Key: &ast.Ident{Name: "Container"},
+									Value: &ast.BasicLit{
+										Kind:  token.STRING,
+										Value: fmt.Sprintf(`"%s"`, container),
+									},
+								})
+								expr.Args[2].(*ast.CompositeLit).Elts = elts
 							}
 						}
 					}
 				}
-				return true
-			}, nil)
-			if TestExpr(`\.gox$`, pkg.GoFiles[i]) {
-				GenerateTemplate(file, pkg.ImportPath, s.options.Watch)
 			}
+			return true
+		}, nil)
+		if TestExpr(`\.gox$`, fileSet.Files()[i].Name()) {
+			GenerateTemplate(file, pkg.ImportPath, s.options.Watch)
 		}
 	}
+	// }
 
 	if pkg.Package.ImportPath == "github.com/gopherjs/gopherjs/chunks" {
 		for _, file := range files {

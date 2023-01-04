@@ -184,7 +184,7 @@ func (context *ScssCompiler) transformRule(rule *css.CSSRule, path string) strin
 	if rule.Type == css.IMPORT_RULE {
 		value := rule.Style.Selector.Tokens[1].Value
 		pathSplit := strings.Split(path, "/")
-		cssPath := "./" + resolve.Join(strings.Join(pathSplit[1:len(pathSplit)-1], "/"), value[4:len(value)-1])
+		cssPath := "/" + resolve.Join(strings.Join(pathSplit[1:len(pathSplit)-1], "/"), value[4:len(value)-1])
 		context.tasks.Add(cssPath)
 
 		return ""

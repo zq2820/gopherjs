@@ -596,6 +596,11 @@ func Compile(importPath string, files []*ast.File, fileSet *token.FileSet, impor
 				pkg = signature.Pkg
 			}
 
+			if funcCtx.initArgs(t.Type()) == "Props" {
+				var t = funcCtx.pkgCtx.objectNames[t.Type().(*types.TypeParam).Constraint().(*types.Named).Obj()]
+				fmt.Println(t)
+			}
+
 			d.DeclCode = []byte(fmt.Sprintf("\t%s = $%sType(%s, %s);\n", t.Name(), strings.ToLower(typeKind(t.Type())[5:]), funcCtx.initArgs(t.Type()), pkg))
 		})
 		typeDecls = append(typeDecls, &d)
@@ -674,7 +679,7 @@ func (fc *funcContext) initArgs(ty types.Type) string {
 	case *types.TypeParam:
 		// 处理泛型
 		if named, ok := t.Constraint().(*types.Named); ok {
-			return fmt.Sprintf("%s", named.Obj().Name())
+			return fmt.Sprintf("%s", fc.typeName(named))
 		} else {
 			return "[]"
 		}
