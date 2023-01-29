@@ -55,6 +55,8 @@ type ImportOptions struct {
 }
 
 func ImportNodeModule(lib string, importName string, options ...ImportOptions) *js.Object {
+	packages := js.Global.Get("_node_modules")
+
 	name := importName
 	if options[0].AsName != "" {
 		name = options[0].AsName
@@ -62,13 +64,13 @@ func ImportNodeModule(lib string, importName string, options ...ImportOptions) *
 
 	if chunks.IsWatch {
 		if options[0].Method == DEFAULT {
-			if js.Global.Get(lib).Get("default") != js.Undefined {
-				return js.Global.Get(lib).Get("default")
+			if packages.Get(lib).Get("default") != js.Undefined {
+				return packages.Get(lib).Get("default")
 			}
-			return js.Global.Get(lib)
+			return packages.Get(lib)
 		} else {
-			return js.Global.Get(lib).Get(name)
+			return packages.Get(lib).Get(name)
 		}
 	}
-	return js.Global.Get(lib).Get(options[0].Container).Get(name)
+	return packages.Get(lib).Get(options[0].Container).Get(name)
 }
