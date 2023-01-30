@@ -273,6 +273,10 @@ func UnwrapValue(v *Object) interface{} {
 	return (interface{})(unsafe.Pointer(v.Unsafe()))
 }
 
+func Reference(r string, retain ...string) *Object {
+	return Global.Get(retain[0]).Get(r)
+}
+
 func init() {
 	// Avoid dead code elimination.
 	e := Error{}

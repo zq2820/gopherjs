@@ -18,16 +18,12 @@ require (
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
 	golang.org/x/text v0.3.7
 	golang.org/x/tools v0.1.11
-	honnef.co/go/js/console v0.0.0-20150119023344-105276c43558
-	honnef.co/go/js/dom v0.0.0-20210725211120-f030747120f2
-	myitcv.io v0.0.0-20201125173645-a7167afc9e13
 )
 
 require github.com/tdewolff/parse/v2 v2.6.0 // indirect
 
 require (
 	github.com/gorilla/css v1.0.0
-	github.com/jinzhu/copier v0.3.5
 	github.com/speps/go-hashids/v2 v2.0.1
 	github.com/tdewolff/minify/v2 v2.11.11
 	github.com/vanng822/css v1.0.1
